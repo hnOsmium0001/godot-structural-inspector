@@ -1,0 +1,18 @@
+[general]
+
+singleton=false
+load_once=true
+symbol_prefix="godot_"
+reloadable=false
+
+[entry]
+
+Linux.64="res://bin/linux/libgdexample.so"
+Windows.64="res://bin/win64/libgdexample.dll"
+OSX.64="res://bin/osx/libgdexample.dylib"
+
+[dependencies]
+
+Linux.64=[  ]
+Windows.64=[  ]
+OSX.64=[  ]
