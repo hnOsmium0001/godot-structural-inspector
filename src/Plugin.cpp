@@ -69,6 +69,6 @@ Plugin::Plugin() {
 Plugin::~Plugin() {
 }
 
-size_t std::hash<String>::operator()(const String& str) const {
+size_t std::hash<String>::operator()(const String& str) const noexcept {
 	return str.hash();
 }

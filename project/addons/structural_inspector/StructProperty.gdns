@@ -3,6 +3,6 @@
 [ext_resource path="res://bin/plugin.gdnlib" type="GDNativeLibrary" id=1]
 
 [resource]
-resource_name = "ArrayPropertyEditor"
-class_name = "ArrayPropertyEditor"
+resource_name = "DictionaryProperty"
+class_name = "StructProperty"
 library = ExtResource( 1 )

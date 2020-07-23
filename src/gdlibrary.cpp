@@ -14,12 +14,12 @@ extern "C" void GDN_EXPORT godot_nativescript_init(void *handle) {
 	godot::Godot::nativescript_init(handle);
 
 	using namespace godot::structural_editor;
-	godot::register_class<Plugin>();
-	godot::register_class<InspectorPlugin>();
-	godot::register_class<ResourceSchema>();
-	godot::register_class<DictionaryPropertyEditor>();
-	godot::register_class<DictionaryProperty>();
-	godot::register_class<ArrayPropertyEditor>();
-	godot::register_class<ArrayProperty>();
-	godot::register_class<ResourceSchemaProperty>();
+	godot::register_tool_class<Plugin>();
+	godot::register_tool_class<InspectorPlugin>();
+	godot::register_tool_class<ResourceSchema>();
+	godot::register_tool_class<StructEditor>();
+	godot::register_tool_class<StructProperty>();
+	godot::register_tool_class<ArrayEditor>();
+	godot::register_tool_class<ArrayProperty>();
+	godot::register_tool_class<ResourceSchemaProperty>();
 }

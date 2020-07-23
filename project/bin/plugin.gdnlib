@@ -7,9 +7,9 @@ reloadable=false
 
 [entry]
 
-Linux.64="res://bin/linux/libgdexample.so"
-Windows.64="res://bin/win64/libgdexample.dll"
-OSX.64="res://bin/osx/libgdexample.dylib"
+Linux.64="res://bin/linux/libgd_structural_editor.so"
+Windows.64="res://bin/win64/libgd_structural_editor.dll"
+OSX.64="res://bin/osx/libgd_structural_editor.dylib"
 
 [dependencies]
 

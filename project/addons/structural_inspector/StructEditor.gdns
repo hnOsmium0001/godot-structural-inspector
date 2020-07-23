@@ -4,5 +4,5 @@
 
 [resource]
 resource_name = "DictionaryPropertyEditor"
-class_name = "DictionaryPropertyEditor"
+class_name = "StructEditor"
 library = ExtResource( 1 )
