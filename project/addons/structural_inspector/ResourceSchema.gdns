@@ -1,8 +1,9 @@
 [gd_resource type="NativeScript" load_steps=2 format=2]
 
-[ext_resource path="res://bin/plugin.gdnlib" type="GDNativeLibrary" id=1]
+[ext_resource path="res://bin/Plugin.gdnlib" type="GDNativeLibrary" id=1]
 
 [resource]
 resource_name = "ResourceSchema"
 class_name = "ResourceSchema"
 library = ExtResource( 1 )
+script_class_name = "ResourceSchema"

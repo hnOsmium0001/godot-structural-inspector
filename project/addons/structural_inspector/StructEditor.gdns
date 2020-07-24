@@ -1,8 +1,8 @@
 [gd_resource type="NativeScript" load_steps=2 format=2]
 
-[ext_resource path="res://bin/plugin.gdnlib" type="GDNativeLibrary" id=1]
+[ext_resource path="res://bin/Plugin.gdnlib" type="GDNativeLibrary" id=1]
 
 [resource]
-resource_name = "DictionaryPropertyEditor"
+resource_name = "StructEditor"
 class_name = "StructEditor"
 library = ExtResource( 1 )

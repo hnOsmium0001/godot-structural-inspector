@@ -2,43 +2,92 @@
 
 #include <CheckBox.hpp>
 #include <InputEventMouseButton.hpp>
-#include <LineEdit.hpp>
 #include <MenuButton.hpp>
-#include <OptionButton.hpp>
 #include <PopupMenu.hpp>
-#include <SpinBox.hpp>
+#include <utility>
+#include <variant>
 
 using namespace godot;
 using namespace godot::structural_editor;
 
-Control* StructSchema::create_edit(const String* name, const Object* target, const Array& path) const {
-	auto editor = new StructEditor(this, target);
+Variant StructSchema::create_value() const {
+	return Dictionary::make();
+}
+
+Control* StructSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
+	auto editor = StructEditor::_new();
+	editor->_custom_init(this, target, path);
 	if (name) {
 		editor->set_property_name(*name);
 	}
 	return editor;
 }
 
-Control* ArraySchema::create_edit(const String* name, const Object* target, const Array& path) const {
-	auto editor = new ArrayEditor(this, target);
+void StructSchema::update_edit(Control* edit, const Variant& data) const {
+	auto editor = static_cast<StructEditor*>(edit);
+	Dictionary data_source = data;
+	for (int i = 0; i < fields.size(); ++i) {
+		auto& field = fields[i];
+		field.def->update_edit(
+				static_cast<Control*>(editor->fields->get_child(i)),
+				data_source[field.name]);
+	}
+}
+
+EditorProperty* StructSchema::create_property() const {
+	auto prop = CommonInspectorProperty::_new();
+	auto editor = StructEditor::_new();
+	editor->_custom_init(this, prop, Array::make());
+	prop->_custom_init(this, editor);
+	return prop;
+}
+
+Variant ArraySchema::create_value() const {
+	return Array::make();
+}
+
+Control* ArraySchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
+	auto editor = ArrayEditor::_new();
+	editor->_custom_init(this, target, path);
 	if (name) {
 		editor->set_property_name(*name);
 	}
 	return editor;
 }
 
-Control* StringSchema::create_edit(const String* name, const Object* target, const Array& path) const {
+void ArraySchema::update_edit(Control* edit, const Variant& data) const {
+	auto editor = static_cast<ArrayEditor*>(data);
+	Array data_source = data;
+	for (int i = 0; i < data_source.size(); ++i) {
+		auto field = static_cast<Control*>(editor->elements->get_child(i));
+		element_type->update_edit(field, data_source[i]);
+	}
+}
+
+EditorProperty* ArraySchema::create_property() const {
+	auto prop = CommonInspectorProperty::_new();
+	auto editor = ArrayEditor::_new();
+	editor->_custom_init(this, prop, Array::make());
+	prop->_custom_init(this, editor);
+	return prop;
+}
+
+Variant StringSchema::create_value() const {
+	return "";
+}
+
+Control* StringSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
 	// TODO filtering support
 
-	auto edit = new LineEdit();
+	auto edit = LineEdit::_new();
 	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 	edit->connect("text_changed", target, "update_value", path);
 	if (name) {
-		auto label = new Label();
+		auto label = Label::_new();
 		label->set_text(*name);
 		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 
-		auto box = new HBoxContainer();
+		auto box = HBoxContainer::_new();
 		box->add_child(label);
 		box->add_child(edit);
 		return box;
@@ -47,19 +96,40 @@ Control* StringSchema::create_edit(const String* name, const Object* target, con
 	}
 }
 
-Control* EnumSchema::create_edit(const String* name, const Object* target, const Array& path) const {
-	auto edit = new OptionButton();
+void StringSchema::update_edit(Control* edit, const Variant& data) const {
+	String text = data;
+	if (auto line_edit = Object::cast_to<LineEdit>(edit)) {
+		line_edit->set_text(data);
+		return;
+	}
+	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
+		auto line_edit = static_cast<LineEdit*>(editor->get_child(1));
+		line_edit->set_text(text);
+		return;
+	}
+}
+
+EditorProperty* StringSchema::create_property() const {
+	return CommonInspectorProperty::_new();
+}
+
+Variant EnumSchema::create_value() const {
+	return 0;
+}
+
+Control* EnumSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
+	auto edit = OptionButton::_new();
 	for (auto& [name, id] : elements) {
 		edit->get_popup()->add_item(name, id);
 	}
 	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 	edit->connect("item_selected", target, "update_value", path);
 	if (name) {
-		auto label = new Label();
+		auto label = Label::_new();
 		label->set_text(*name);
 		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 
-		auto box = new HBoxContainer();
+		auto box = HBoxContainer::_new();
 		box->add_child(label);
 		box->add_child(edit);
 		return box;
@@ -68,18 +138,39 @@ Control* EnumSchema::create_edit(const String* name, const Object* target, const
 	}
 }
 
-Control* IntSchema::create_edit(const String* name, const Object* target, const Array& path) const {
-	auto edit = new SpinBox();
+void EnumSchema::update_edit(Control* edit, const Variant& data) const {
+	int id = data;
+	if (auto option_btn = Object::cast_to<OptionButton>(edit)) {
+		option_btn->select(option_btn->get_item_index(id));
+		return;
+	}
+	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
+		auto option_btn = static_cast<OptionButton*>(editor->get_child(1));
+		option_btn->select(option_btn->get_item_index(id));
+		return;
+	}
+}
+
+EditorProperty* EnumSchema::create_property() const {
+	return CommonInspectorProperty::_new();
+}
+
+Variant IntSchema::create_value() const {
+	return 0;
+}
+
+Control* IntSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
+	auto edit = SpinBox::_new();
 	edit->set_min(static_cast<real_t>(min_value));
 	edit->set_max(static_cast<real_t>(max_value));
 	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 	edit->connect("value_changed", target, "update_value", path);
 	if (name) {
-		auto label = new Label();
+		auto label = Label::_new();
 		label->set_text(*name);
 		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 
-		auto box = new HBoxContainer();
+		auto box = HBoxContainer::_new();
 		box->add_child(label);
 		box->add_child(edit);
 		return box;
@@ -88,18 +179,39 @@ Control* IntSchema::create_edit(const String* name, const Object* target, const 
 	}
 }
 
-Control* RealSchema::create_edit(const String* name, const Object* target, const Array& path) const {
-	auto edit = new SpinBox();
+void IntSchema::update_edit(Control* edit, const Variant& data) const {
+	int value = data;
+	if (auto spin_box = Object::cast_to<SpinBox>(edit)) {
+		spin_box->set_value(value);
+		return;
+	}
+	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
+		auto spin_box = static_cast<SpinBox*>(editor->get_child(1));
+		spin_box->set_value(value);
+		return;
+	}
+}
+
+EditorProperty* IntSchema::create_property() const {
+	return CommonInspectorProperty::_new();
+}
+
+Variant FloatSchema::create_value() const {
+	return 0.0;
+}
+
+Control* FloatSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
+	auto edit = SpinBox::_new();
 	edit->set_min(min_value);
 	edit->set_max(max_value);
 	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 	edit->connect("value_changed", target, "update_value", path);
 	if (name) {
-		auto label = new Label();
+		auto label = Label::_new();
 		label->set_text(*name);
 		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 
-		auto box = new HBoxContainer();
+		auto box = HBoxContainer::_new();
 		box->add_child(label);
 		box->add_child(edit);
 		return box;
@@ -108,20 +220,177 @@ Control* RealSchema::create_edit(const String* name, const Object* target, const
 	}
 }
 
-Control* BoolSchema::create_edit(const String* name, const Object* target, const Array& path) const {
-	auto edit = new CheckBox();
+void FloatSchema::update_edit(Control* edit, const Variant& data) const {
+	real_t value = data;
+	if (auto spin_box = Object::cast_to<SpinBox>(edit)) {
+		spin_box->set_value(value);
+		return;
+	}
+	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
+		auto spin_box = static_cast<SpinBox*>(editor->get_child(1));
+		spin_box->set_value(value);
+		return;
+	}
+}
+
+EditorProperty* FloatSchema::create_property() const {
+	return CommonInspectorProperty::_new();
+}
+
+Variant BoolSchema::create_value() const {
+	return false;
+}
+
+Control* BoolSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
+	auto edit = CheckBox::_new();
 	edit->connect("toggled", target, "update_value", path);
 	if (name) {
-		auto label = new Label();
+		auto label = Label::_new();
 		label->set_text(*name);
 		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 
-		auto box = new HBoxContainer();
+		auto box = HBoxContainer::_new();
 		box->add_child(label);
 		box->add_child(edit);
 		return box;
 	} else {
 		return edit;
+	}
+}
+
+void BoolSchema::update_edit(Control* edit, const Variant& data) const {
+	bool value = data;
+	if (auto checkbox = Object::cast_to<CheckBox>(edit)) {
+		checkbox->set_pressed(value);
+		return;
+	}
+	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
+		auto checkbox = static_cast<CheckBox*>(editor->get_child(1));
+		checkbox->set_pressed(value);
+		return;
+	}
+}
+
+EditorProperty* BoolSchema::create_property() const {
+	return CommonInspectorProperty::_new();
+}
+
+void ResourceSchema::_register_methods() {
+	register_property("properties", &ResourceSchema::properties, Array{});
+}
+
+void ResourceSchema::_init() {
+}
+
+namespace {
+std::unique_ptr<Schema> parse_properties(const Dictionary& def) {
+	if (!def.has("type")) return nullptr;
+	if (def["type"].get_type() != Variant::STRING) return nullptr;
+	String type = def["type"];
+
+	if (type == "struct") {
+		if (!def.has("properties")) return nullptr;
+		if (def["properties"].get_type() != Variant::DICTIONARY) return nullptr;
+		Array properties = def["properties"];
+
+		auto schema = std::make_unique<StructSchema>();
+		for (int i = 0; i < properties.size(); ++i) {
+			auto variant = properties[i];
+			if (variant.get_type() != Variant::DICTIONARY) continue;
+			Dictionary property_def = variant;
+
+			if (!property_def.has("name")) continue;
+			if (property_def["name"].get_type() != Variant::STRING) continue;
+			String name = property_def["name"];
+
+			schema->fields.push_back(StructSchema::Field{ name, parse_properties(property_def) });
+		}
+
+		return schema;
+	} else if (type == "array") {
+		if (!def.has("element_type")) return nullptr;
+		if (def["element_type"].get_type() != Variant::DICTIONARY) return nullptr;
+		Dictionary element_type_dict = def["element_type"];
+
+		auto element_type = parse_properties(element_type_dict);
+		if (!element_type) return nullptr;
+
+		auto schema = std::make_unique<ArraySchema>();
+		schema->element_type = std::move(element_type);
+		return schema;
+	} else if (type == "string") {
+		if (!def.has("pattern")) return nullptr;
+		if (def["pattern"].get_type() != Variant::STRING) return nullptr;
+		String pattern = def["pattern"];
+
+		auto schema = std::make_unique<StringSchema>();
+		auto regex = new RegEx();
+		if (auto err = regex->compile(pattern); err != Error::OK) {
+			ERR_PRINT("Error while compiling regex pattern. Error code: " + String::num_int64(static_cast<int64_t>(err)));
+			return nullptr;
+		}
+		schema->pattern = Ref{ regex };
+		return schema;
+	} else if (type == "enum") {
+		if (!def.has("values")) return nullptr;
+		if (def["values"].get_type() != Variant::ARRAY) return nullptr;
+		Array values = def["values"];
+
+		auto schema = std::make_unique<EnumSchema>();
+		for (int i = 0; i < values.size(); ++i) {
+			Dictionary value = values[i];
+			if (!value.has("name")) continue;
+			if (def["name"].get_type() != Variant::STRING) continue;
+			String name = value["value"];
+			int id = value.has("id") ? value["id"] : i;
+			schema->elements.push_back({ name, id });
+		}
+
+		return schema;
+	} else if (type == "int") {
+		auto schema = std::make_unique<IntSchema>();
+		if (def.has("min_value") && def["min_value"].get_type() == Variant::INT) {
+			schema->min_value = def["min_value"];
+		}
+		if (def.has("max_value") && def["max_value"].get_type() == Variant::INT) {
+			schema->max_value = def["max_value"];
+		}
+		return schema;
+	} else if (type == "float") {
+		auto schema = std::make_unique<FloatSchema>();
+		if (def.has("min_value") && def["min_value"].get_type() == Variant::INT) {
+			schema->min_value = def["min_value"];
+		}
+		if (def.has("max_value") && def["max_value"].get_type() == Variant::INT) {
+			schema->max_value = def["max_value"];
+		}
+		return schema;
+	} else if (type == "bool") {
+		return std::make_unique<BoolSchema>();
+	} else {
+		return nullptr;
+	}
+}
+} // namespace
+
+const std::unordered_map<String, Schema*>& ResourceSchema::get_info() const {
+	if (!initialized) {
+		for (int i = 0; i < properties.size(); ++i) {
+			Dictionary dict = properties[i];
+			if (!dict.has("name")) continue;
+			info_cache.insert({ dict["name"], ::parse_properties(dict).release() });
+		}
+		initialized = true;
+	}
+	return info_cache;
+}
+
+ResourceSchema::ResourceSchema() {
+}
+
+ResourceSchema::~ResourceSchema() {
+	for (auto& [_, schema] : info_cache) {
+		delete schema;
 	}
 }
 
@@ -132,20 +401,26 @@ void StructEditor::_register_methods() {
 }
 
 void StructEditor::_init() {
-	toolbar = new HBoxContainer();
+	toolbar = HBoxContainer::_new();
 	add_child(toolbar);
 
-	title = new Label();
+	title = Label::_new();
 	toolbar->add_child(title);
 
-	fields = new VBoxContainer();
-	for (auto& [name, schema] : schema->fields) {
-		auto path = this->path;
-		path.append(name);
-		auto field = schema->create_edit(&name, notif_target, path);
-		fields->add_child(field);
-	}
+	fields = VBoxContainer::_new();
 	add_child(fields);
+}
+
+void StructEditor::_custom_init(const StructSchema* schema, CommonInspectorProperty* notif_target, const Array& path) {
+	this->schema = schema;
+	this->notif_target = notif_target;
+	this->path = path;
+
+	for (auto& [name, schema] : schema->fields) {
+		auto path = this->path.duplicate();
+		path.append(name);
+		fields->add_child(schema->create_edit(&name, notif_target, path));
+	}
 }
 
 bool StructEditor::has_property_name() const {
@@ -164,18 +439,13 @@ void StructEditor::set_property_name(const String& name) {
 StructEditor::StructEditor() {
 }
 
-StructEditor::StructEditor(const StructSchema* schema, const Object* notif_target) {
-	this->schema = schema;
-	this->notif_target = notif_target;
-}
-
 StructEditor::~StructEditor() {
 }
 
 void ArrayEditor::_element_gui_input(Ref<InputEvent> event, Control* element) {
 	Ref<InputEventMouseButton> mb = event;
 	if (mb.is_valid() && element->get_global_rect().has_point(get_global_mouse_position())) {
-		selected_elm = element->get_index();
+		selected_idx = element->get_index();
 		remove->set_disabled(false);
 		return;
 	}
@@ -185,18 +455,31 @@ void ArrayEditor::_add_element() {
 	auto path = this->path;
 	path.append(elements->get_child_count());
 	auto element = schema->create_edit(nullptr, notif_target, path);
+	notif_target->add_array_element(-1, schema->create_value(), path);
 	elements->add_child(element);
+	if (selected_idx != -1) {
+		elements->move_child(element, selected_idx);
+	}
 
 	Array binds{};
 	binds.append(element);
 	element->connect("gui_input", this, "_element_gui_input", binds);
+
+	if (elements->get_child_count() == schema->max_elements) {
+		add->set_disabled(true);
+	}
 }
 
 void ArrayEditor::_remove_element() {
-	if (selected_elm != -1) {
-		elements->get_child(selected_elm)->queue_free();
-		selected_elm = -1;
+	if (selected_idx != -1) {
+		elements->get_child(selected_idx)->queue_free();
+		notif_target->remove_array_element(selected_idx, path);
+		selected_idx = -1;
 		remove->set_disabled(true);
+
+		if (elements->get_child_count() < schema->max_elements) {
+			add->set_disabled(false);
+		}
 	}
 }
 
@@ -210,20 +493,32 @@ void ArrayEditor::_register_methods() {
 }
 
 void ArrayEditor::_init() {
-	toolbar = new HBoxContainer();
+	toolbar = HBoxContainer::_new();
 	add_child(toolbar);
 
-	title = new Label();
+	title = Label::_new();
 	toolbar->add_child(title);
-	add = new Button();
+	add = Button::_new();
 	add->connect("pressed", this, "_add_element");
 	toolbar->add_child(add);
-	remove = new Button();
+	remove = Button::_new();
 	remove->connect("pressed", this, "_remove_element");
 	toolbar->add_child(remove);
 
-	elements = new VBoxContainer();
+	elements = VBoxContainer::_new();
 	add_child(elements);
+}
+
+void ArrayEditor::_custom_init(const ArraySchema* schema, CommonInspectorProperty* notif_target, const Array& path) {
+	this->schema = schema;
+	this->notif_target = notif_target;
+	this->path = path;
+
+	for (int i = 0; i < schema->min_elements; ++i) {
+		auto path = this->path.duplicate();
+		path.append(i);
+		elements->add_child(schema->create_edit(nullptr, notif_target, path));
+	}
 }
 
 bool ArrayEditor::has_property_name() const {
@@ -242,18 +537,12 @@ void ArrayEditor::set_property_name(const String& name) {
 ArrayEditor::ArrayEditor() {
 }
 
-ArrayEditor::ArrayEditor(const ArraySchema* schema, const Object* notif_target) {
-	this->schema = schema;
-	this->notif_target = notif_target;
-}
-
 ArrayEditor::~ArrayEditor() {
 }
 
-namespace {
-Variant find_object(const Variant& root, const Array& path, int distance) {
+Variant CommonInspectorProperty::find_object(const Array& path, int distance) {
 	// Either `Array` or `Dictionary`
-	auto current_object = root;
+	auto current_object = get_edited_object()->get(get_edited_property());
 	for (int i = 0; i < path.size() - distance; ++i) {
 		auto& prop_name = path[i];
 		switch (prop_name.get_type()) {
@@ -276,8 +565,38 @@ Variant find_object(const Variant& root, const Array& path, int distance) {
 	return current_object;
 }
 
-void update_value(const Variant& root, const Array& path, const Variant& value) {
-	auto object = find_object(root, path, 1);
+void CommonInspectorProperty::_toggle_editor_visibility() {
+	if (editor->is_visible()) {
+		remove_child(editor);
+		set_bottom_editor(nullptr);
+		editor->set_visible(false);
+	} else {
+		add_child(editor);
+		set_bottom_editor(editor);
+		editor->set_visible(true);
+	}
+}
+
+void CommonInspectorProperty::_register_methods() {
+	register_method("_toggle_editor_visibility", &CommonInspectorProperty::_toggle_editor_visibility);
+	register_method("update_property", &CommonInspectorProperty::update_property);
+}
+
+void CommonInspectorProperty::_init() {
+	btn = Button::_new();
+	btn->connect("pressed", this, "_toggle_editor_visibility");
+	add_child(btn);
+}
+
+void CommonInspectorProperty::_custom_init(const Schema* schema, Control* editor) {
+	this->schema = schema;
+	this->editor = editor;
+}
+
+void CommonInspectorProperty::update_value(Variant value, const Array& path) {
+	if (updating) return;
+
+	auto object = find_object(path, 1);
 	auto last_prop_name = path[path.size() - 1];
 	switch (last_prop_name.get_type()) {
 		case Variant::STRING: {
@@ -295,70 +614,342 @@ void update_value(const Variant& root, const Array& path, const Variant& value) 
 			return;
 		} break;
 	}
-}
-} // namespace
 
-void StructProperty::_register_methods() {
-	register_method("update_property", &StructProperty::update_property);
+	emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
 }
 
-void StructProperty::_init() {
+void CommonInspectorProperty::add_array_element(int pos, Variant elm, const Array& path) {
+	if (updating) return;
+
+	Array array = find_object(path, 0);
+	if (pos == -1) {
+		array.insert(pos, elm);
+	} else {
+		array.append(elm);
+	}
+
+	emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
 }
 
-void StructProperty::update_value(Variant value, const Array& path) {
-	::update_value(get_edited_object()->get(get_edited_property()), path, value);
+void CommonInspectorProperty::remove_array_element(int pos, const Array& path) {
+	if (updating) return;
+
+	Array array = find_object(path, 0);
+	array.remove(pos);
+
+	emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
 }
 
-void StructProperty::add_array_element(int pos, Variant elm, const Array& path) {
-	Array array = ::find_object(get_edited_object()->get(get_edited_property()), path, 0);
-	array.insert(pos, elm);
+void CommonInspectorProperty::update_property() {
+	updating = true;
+	schema->update_edit(editor, get_edited_object()->get(get_edited_property()));
+	updating = false;
 }
 
-void StructProperty::remove_array_element(int idx, const Array& path) {
-	Array array = ::find_object(get_edited_object()->get(get_edited_property()), path, 0);
-	array.remove(idx);
+CommonInspectorProperty::CommonInspectorProperty() {
 }
 
-void StructProperty::update_property() {
+CommonInspectorProperty::~CommonInspectorProperty() {
 }
 
-StructProperty::StructProperty() {
+HBoxContainer* ResourceSchemaNode::_create_named_child(const String& name, Control* edit) {
+	auto line = HBoxContainer::_new();
+	auto label = Label::_new();
+	label->set_text(name);
+	label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
+	line->add_child(label);
+	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
+	line->add_child(edit);
+	return line;
 }
 
-StructProperty::~StructProperty() {
+ResourceSchemaNode* ResourceSchemaNode::_make_child() {
+	auto child = ResourceSchemaNode::_new();
+	child->_custom_init(root);
+	return child;
 }
 
-void ArrayProperty::_register_methods() {
-	register_method("update_property", &ArrayProperty::update_property);
+void ResourceSchemaNode::_type_selected(int id) {
+	static const auto free_all = [](Node* node) {
+		for (int i = 0; i < node->get_child_count(); ++i) {
+			node->get_child(i)->queue_free();
+		}
+	};
+
+	switch (schema_id) {
+		case STRUCT: {
+			add->set_visible(false);
+			remove->set_visible(false);
+			free_all(list);
+			list->set_visible(false);
+			delete schema;
+		} break;
+		case ARRAY: {
+			free_all(list);
+			list->set_visible(false);
+			min_value->set_visible(false);
+			max_value->set_visible(false);
+			delete schema;
+		} break;
+		case STRING: {
+			pattern->set_visible(false);
+			delete schema;
+		} break;
+		case ENUM: {
+			add->set_visible(false);
+			remove->set_visible(false);
+			free_all(list);
+			list->set_visible(false);
+			delete schema;
+		} break;
+		case INT: {
+			min_value->set_visible(false);
+			max_value->set_visible(false);
+			delete schema;
+		} break;
+		case FLOAT: {
+			min_value->set_visible(false);
+			max_value->set_visible(false);
+			delete schema;
+		} break;
+		case BOOL: {
+			// Do nothing
+		} break;
+		default: {
+			// Do nothing, for schema_id == UNKNOWN
+		} break;
+	}
+
+	switch (id) {
+		case STRUCT: {
+			add->set_visible(true);
+			remove->set_visible(true);
+			list->set_visible(true);
+			schema = new StructSchema();
+			schema_id = STRUCT;
+		} break;
+		case ARRAY: {
+			list->set_visible(true);
+			list->add_child(_make_child());
+			min_value->set_visible(true);
+			max_value->set_visible(true);
+			schema = new ArraySchema();
+			schema_id = ARRAY;
+		} break;
+		case STRING: {
+			pattern->set_visible(true);
+			schema = new StringSchema();
+			schema_id = STRING;
+		} break;
+		case ENUM: {
+			add->set_visible(true);
+			remove->set_visible(true);
+			list->set_visible(true);
+			schema = new EnumSchema();
+			schema_id = ENUM;
+		} break;
+		case INT: {
+			min_value->set_visible(true);
+			max_value->set_visible(true);
+			schema = new IntSchema();
+			schema_id = INT;
+		} break;
+		case FLOAT: {
+			min_value->set_visible(true);
+			max_value->set_visible(true);
+			schema = new FloatSchema();
+			schema_id = FLOAT;
+		} break;
+		case BOOL: {
+			schema = new BoolSchema();
+			schema_id = BOOL;
+		} break;
+		default: {
+			schema = nullptr;
+			schema_id = UNKNOWN;
+			ERR_PRINT("Unknown type id " + String::num_int64(id));
+		} break;
+	}
 }
 
-void ArrayProperty::_init() {
+void ResourceSchemaNode::_add_list_item() {
+	switch (schema_id) {
+		case STRUCT: {
+			auto schema = dynamic_cast<StructSchema*>(this->schema);
+			list->add_child(_make_child());
+		} break;
+		case ENUM: {
+			auto enum_value = VBoxContainer::_new();
+			int idx = list->get_child_count();
+			list->add_child(enum_value);
+
+			auto name_edit = LineEdit::_new();
+			name_edit->connect("text_changed", this, "_enum_id_set", Array::make(idx));
+			enum_value->add_child(_create_named_child("Name", name_edit));
+
+			auto id_edit = SpinBox::_new();
+			id_edit->set_max(INT_MAX);
+			id_edit->set_value(idx);
+			id_edit->connect("value_changed", this, "_enum_id_set", Array::make(idx));
+			enum_value->add_child(_create_named_child("ID", id_edit));
+
+			auto schema = dynamic_cast<EnumSchema*>(this->schema);
+			schema->elements.push_back({ "", idx });
+		}
+		default: {
+			return;
+		}
+	}
 }
 
-void ArrayProperty::update_value(Variant value, const Array& path) {
-	::update_value(get_edited_object()->get(get_edited_property()), path, value);
+void ResourceSchemaNode::_remove_list_item() {
+	switch (schema_id) {
+		case STRUCT: {
+			auto schema = dynamic_cast<StructSchema*>(this->schema);
+		} break;
+		case ENUM: {
+			auto schema = dynamic_cast<EnumSchema*>(this->schema);
+		} break;
+		default: {
+			return;
+		}
+	}
 }
 
-void ArrayProperty::add_array_element(int pos, Variant elm, const Array& path) {
-	Array array = ::find_object(get_edited_object()->get(get_edited_property()), path, 0);
-	array.insert(pos, elm);
+void ResourceSchemaNode::_min_value_set(real_t value) {
+	switch (schema_id) {
+		case ARRAY: {
+			auto schema = dynamic_cast<ArraySchema*>(this->schema);
+			schema->min_elements = static_cast<int>(value);
+		} break;
+		case INT: {
+			auto schema = dynamic_cast<IntSchema*>(this->schema);
+			schema->min_value = static_cast<int>(value);
+		} break;
+		case FLOAT: {
+			auto schema = dynamic_cast<FloatSchema*>(this->schema);
+			schema->min_value = value;
+		} break;
+		default: {
+			return;
+		}
+	}
 }
 
-void ArrayProperty::remove_array_element(int idx, const Array& path) {
-	Array array = ::find_object(get_edited_object()->get(get_edited_property()), path, 0);
-	array.remove(idx);
+void ResourceSchemaNode::_max_value_set(real_t value) {
+	switch (schema_id) {
+		case ARRAY: {
+			auto schema = dynamic_cast<ArraySchema*>(this->schema);
+			schema->min_elements = static_cast<int>(value);
+		} break;
+		case INT: {
+			auto schema = dynamic_cast<IntSchema*>(this->schema);
+			schema->min_value = static_cast<int>(value);
+		} break;
+		case FLOAT: {
+			auto schema = dynamic_cast<FloatSchema*>(this->schema);
+			schema->min_value = value;
+		} break;
+		default: {
+			return;
+		}
+	}
 }
 
-void ArrayProperty::update_property() {
+void ResourceSchemaNode::_pattern_set(const String& pattern) {
+	switch (schema_id) {
+		case STRING: {
+			auto schema = dynamic_cast<StringSchema*>(this->schema);
+			schema->pattern = Ref{ RegEx::_new() };
+		} break;
+		default: {
+			return;
+		}
+	}
 }
 
-ArrayProperty::ArrayProperty() {
+void ResourceSchemaNode::_enum_name_set(const String& name, int idx) {
+	if (auto schema = dynamic_cast<EnumSchema*>(this->schema)) {
+		schema->elements[idx].name = name;
+	}
 }
 
-ArrayProperty::~ArrayProperty() {
+void ResourceSchemaNode::_enum_id_set(int id, int idx) {
+	if (auto schema = dynamic_cast<EnumSchema*>(this->schema)) {
+		schema->elements[idx].id = id;
+	}
 }
 
-void ResourceSchemaProperty::_toggle_editor_visibility() {
+void ResourceSchemaNode::_register_methods() {
+	register_method("_type_selected", &ResourceSchemaNode::_type_selected);
+	register_method("_add_list_item", &ResourceSchemaNode::_add_list_item);
+	register_method("_remove_list_item", &ResourceSchemaNode::_remove_list_item);
+	register_method("_min_value_set", &ResourceSchemaNode::_min_value_set);
+	register_method("_max_value_set", &ResourceSchemaNode::_max_value_set);
+	register_method("_pattern_set", &ResourceSchemaNode::_pattern_set);
+	register_method("_enum_name_set", &ResourceSchemaNode::_enum_name_set);
+	register_method("_enum_id_set", &ResourceSchemaNode::_enum_id_set);
+}
+
+void ResourceSchemaNode::_init() {
+	type_edit = OptionButton::_new();
+	type_edit->get_popup()->add_item("Struct", STRUCT);
+	type_edit->get_popup()->add_item("Array", ARRAY);
+	type_edit->get_popup()->add_item("String", STRING);
+	type_edit->get_popup()->add_item("Enum", ENUM);
+	type_edit->get_popup()->add_item("Int", INT);
+	type_edit->get_popup()->add_item("Float", FLOAT);
+	type_edit->get_popup()->add_item("Bool", BOOL);
+	type_edit->connect("item_selected", this, "_type_selected");
+	add_child(_create_named_child("Type", type_edit));
+
+	toolbar = HBoxContainer::_new();
+	add_child(toolbar);
+
+	add = Button::_new();
+	add->set_flat(true);
+	add->set_visible(false);
+	add->set_button_icon(get_icon("Add", "EditorIcons"));
+	add->connect("pressed", this, "_add_list_item");
+	toolbar->add_child(add);
+
+	remove = Button::_new();
+	remove->set_flat(true);
+	remove->set_visible(false);
+	remove->set_button_icon(get_icon("Remove", "EditorIcons"));
+	remove->connect("pressed", this, "_remove_list_item");
+	toolbar->add_child(remove);
+
+	list = VBoxContainer::_new();
+	add_child(list);
+	
+	min_value = SpinBox::_new();
+	min_value->connect("value_changed", this, "_min_value_set");
+	add_child(min_value);
+	
+	max_value = SpinBox::_new();
+	max_value->connect("value_changed", this, "_max_value_set");
+	add_child(max_value);
+
+	pattern = LineEdit::_new();
+	pattern->connect("text_changed", this, "_pattern_set");
+	add_child(pattern);
+}
+
+void ResourceSchemaNode::_custom_init(ResourceSchemaInspectorProperty* root) {
+	this->root = root;
+}
+
+ResourceSchemaNode::ResourceSchemaNode() {
+}
+
+ResourceSchemaNode::~ResourceSchemaNode() {
+	if (owns_schema) {
+		delete schema;
+	}
+}
+
+void ResourceSchemaInspectorProperty::_toggle_editor_visibility() {
 	if (properties->is_visible()) {
 		remove_child(properties);
 		set_bottom_editor(nullptr);
@@ -370,24 +961,67 @@ void ResourceSchemaProperty::_toggle_editor_visibility() {
 	}
 }
 
-void ResourceSchemaProperty::_register_methods() {
-	register_method("update_property", &ResourceSchemaProperty::update_property);
+void ResourceSchemaInspectorProperty::_register_methods() {
+	register_method("_toggle_editor_visibility", &ResourceSchemaInspectorProperty::_toggle_editor_visibility);
+	register_method("add_root_property", &ResourceSchemaInspectorProperty::add_root_property);
+	register_method("remove_root_property", &ResourceSchemaInspectorProperty::remove_root_property);
+	register_method("update_property", &ResourceSchemaInspectorProperty::update_property);
 }
 
-void ResourceSchemaProperty::_init() {
-	btn = new Button();
+std::unique_ptr<Schema> ResourceSchemaInspectorProperty::build() {
+	return nullptr; // TODO
+}
+
+void ResourceSchemaInspectorProperty::_init() {
+	btn = Button::_new();
 	btn->connect("pressed", this, "_toggle_editor_visibility");
 	add_child(btn);
 
+	properties = VBoxContainer::_new();
+
+	auto toolbar = HBoxContainer::_new();
+	auto add = Button::_new();
+	add->set_flat(true);
+	add->set_button_icon(get_icon("Add", "EditorIcons"));
+	add->connect("pressed", this, "add_root_property");
+	toolbar->add_child(add);
+	auto remove = Button::_new();
+	remove->set_flat(true);
+	remove->set_button_icon(get_icon("Remove", "EditorIcons"));
+	remove->connect("pressed", this, "remove_root_property");
+	toolbar->add_child(remove);
+}
+
+void ResourceSchemaInspectorProperty::add_root_property(int pos) {
+	auto prop = ResourceSchemaNode::_new();
+	properties->add_child(prop);
+	if (pos != -1) {
+		properties->move_child(prop, properties->get_child_count() - 1);
+	}
+	emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
+}
+
+void ResourceSchemaInspectorProperty::remove_root_property(int pos) {
+	if (pos == -1) {
+		if (selected_idx != -1) {
+			properties->get_child(pos)->queue_free();
+			selected_idx = -1;
+		}
+	} else {
+		properties->get_child(pos)->queue_free();
+	}
+	emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
+}
+
+void ResourceSchemaInspectorProperty::update_property() {
+	updating = true;
+	Array root = get_edited_object()->get(get_edited_property());
 	// TODO
-	//properties = new ArrayPropertyEditor();
+	updating = false;
 }
 
-void ResourceSchemaProperty::update_property() {
+ResourceSchemaInspectorProperty::ResourceSchemaInspectorProperty() {
 }
 
-ResourceSchemaProperty::ResourceSchemaProperty() {
-}
-
-ResourceSchemaProperty::~ResourceSchemaProperty() {
+ResourceSchemaInspectorProperty::~ResourceSchemaInspectorProperty() {
 }
