@@ -9,6 +9,7 @@
 #include <HBoxContainer.hpp>
 #include <Label.hpp>
 #include <LineEdit.hpp>
+#include <MarginContainer.hpp>
 #include <OptionButton.hpp>
 #include <RegEx.hpp>
 #include <Resource.hpp>
@@ -21,6 +22,23 @@
 #include <vector>
 
 namespace godot::structural_editor {
+
+class NXButton : public Button {
+	GODOT_CLASS(NXButton, Button)
+private:
+	String icon_name;
+
+	void _notification(int what);
+	void _apply_icon();
+
+public:
+	static void _register_methods();
+	void _init();
+	void _custom_init(const String& icon_name);
+
+	NXButton();
+	~NXButton();
+};
 
 class CommonInspectorProperty;
 
@@ -171,8 +189,8 @@ private:
 
 	HBoxContainer* toolbar;
 	Label* title;
-	Button* add;
-	Button* remove;
+	NXButton* add;
+	NXButton* remove;
 	VBoxContainer* elements;
 	int64_t selected_idx = -1;
 
@@ -227,7 +245,6 @@ class ResourceSchemaNode : public VBoxContainer {
 	GODOT_CLASS(ResourceSchemaNode, VBoxContainer)
 private:
 	enum NodeType {
-		UNKNOWN,
 		STRUCT,
 		ARRAY,
 		STRING,
@@ -235,6 +252,7 @@ private:
 		INT,
 		FLOAT,
 		BOOL,
+		UNKNOWN,
 	};
 
 	ResourceSchemaInspectorProperty* root;
@@ -242,16 +260,19 @@ private:
 
 	HBoxContainer* toolbar;
 	// Child of `toolbar`, used by STRUCT, ENUM
-	Button* add;
+	NXButton* add;
 	// Child of `toolbar`, used by STRUCT, ENUM
-	Button* remove;
+	NXButton* remove;
 
 	// Used for STRUCT, ARRAY, ENUM
 	VBoxContainer* list;
 	// Used for ARRAY (should be min/max elements), INT, FLOAT
+	HBoxContainer* min_value_line;
 	SpinBox* min_value;
+	HBoxContainer* max_value_line;
 	SpinBox* max_value;
 	// Used for STRING
+	HBoxContainer* pattern_line;
 	LineEdit* pattern;
 
 	Schema* schema = nullptr;
@@ -262,7 +283,9 @@ private:
 
 	static HBoxContainer* _create_named_child(const String& name, Control* edit);
 	ResourceSchemaNode* _make_child();
+	Schema* _take_schema();
 
+	void _notification(int what);
 	void _type_selected(int id);
 	void _add_list_item();
 	void _remove_list_item();
@@ -270,8 +293,9 @@ private:
 	void _max_value_set(real_t value);
 	void _pattern_set(const String& pattern);
 
-	void _enum_name_set(const String& name, int idx);
-	void _enum_id_set(int id, int idx);
+	void _enum_name_set(const String& name, Control* child);
+	void _enum_id_set(int id, Control* child);
+	void _child_schema_changed(ResourceSchemaNode* child);
 
 public:
 	static void _register_methods();
@@ -291,6 +315,7 @@ private:
 	bool updating = false;
 
 	void _toggle_editor_visibility();
+	void _property_schema_changed(ResourceSchemaNode* node);
 
 public:
 	static void _register_methods();
@@ -299,6 +324,7 @@ public:
 
 	void add_root_property(int pos = -1);
 	void remove_root_property(int pos = -1);
+	void schema_changed();
 
 	void update_property();
 
