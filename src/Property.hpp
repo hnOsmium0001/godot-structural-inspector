@@ -103,8 +103,8 @@ public:
 
 class IntSchema : public Schema {
 public:
-	int min_value = INT_MIN;
-	int max_value = INT_MAX;
+	int min_value = std::numeric_limits<int>::min();
+	int max_value = std::numeric_limits<int>::max();
 
 	virtual Variant create_value() const override;
 	virtual Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
@@ -136,7 +136,7 @@ class ResourceSchema : public Resource {
 	GODOT_CLASS(ResourceSchema, Resource)
 private:
 	Array properties;
-	// std::unique_ptr incompatible with it. This needs to be manually freed.
+	// std::unique_ptr is incompatible with it. Schemas needs to be manually freed.
 	mutable std::unordered_map<String, Schema*> info_cache;
 	mutable bool initialized = false;
 
@@ -145,6 +145,7 @@ public:
 	void _init();
 
 	const std::unordered_map<String, Schema*>& get_info() const;
+	void set_info(const std::unordered_map<String, Schema*>& data);
 
 	ResourceSchema();
 	~ResourceSchema();
@@ -241,8 +242,8 @@ public:
 
 class ResourceSchemaInspectorProperty;
 
-class ResourceSchemaNode : public VBoxContainer {
-	GODOT_CLASS(ResourceSchemaNode, VBoxContainer)
+class ResourceSchemaNode : public MarginContainer {
+	GODOT_CLASS(ResourceSchemaNode, MarginContainer)
 private:
 	enum NodeType {
 		STRUCT,
@@ -256,6 +257,10 @@ private:
 	};
 
 	ResourceSchemaInspectorProperty* root;
+	ResourceSchemaNode* parent;
+	VBoxContainer* contents;
+
+	// Button for changing type of this node
 	OptionButton* type_edit;
 
 	HBoxContainer* toolbar;
@@ -263,44 +268,52 @@ private:
 	NXButton* add;
 	// Child of `toolbar`, used by STRUCT, ENUM
 	NXButton* remove;
+	// Child of `toolbar`, used by STRUCT, ENUM
+	Label* message;
 
-	// Used for STRUCT, ARRAY, ENUM
-	VBoxContainer* list;
+	// Text input for setting name of this node, used when parent is STRUCT
+	LineEdit* field_name;
 	// Used for ARRAY (should be min/max elements), INT, FLOAT
-	HBoxContainer* min_value_line;
 	SpinBox* min_value;
-	HBoxContainer* max_value_line;
 	SpinBox* max_value;
 	// Used for STRING
-	HBoxContainer* pattern_line;
 	LineEdit* pattern;
+	// Used for STRUCT, ARRAY, ENUM
+	VBoxContainer* list;
 
 	Schema* schema = nullptr;
 	bool owns_schema = true;
 	NodeType schema_id = UNKNOWN;
 
-	int selected_list_idx = -1;
+	bool removing_child = false;
+	bool mouse_inside = false;
 
-	static HBoxContainer* _create_named_child(const String& name, Control* edit);
 	ResourceSchemaNode* _make_child();
-	Schema* _take_schema();
+	bool _is_mouse_inside();
 
+	void _input(Ref<InputEvent> event);
 	void _notification(int what);
 	void _type_selected(int id);
 	void _add_list_item();
-	void _remove_list_item();
+	void _toggle_remove_mode();
+	void _field_name_set(const String& field_name);
 	void _min_value_set(real_t value);
 	void _max_value_set(real_t value);
 	void _pattern_set(const String& pattern);
+	void _child_schema_changed(ResourceSchemaNode* child);
+	void _child_clicked(ResourceSchemaNode* child);
 
 	void _enum_name_set(const String& name, Control* child);
 	void _enum_id_set(int id, Control* child);
-	void _child_schema_changed(ResourceSchemaNode* child);
 
 public:
 	static void _register_methods();
 	void _init();
-	void _custom_init(ResourceSchemaInspectorProperty* root);
+	void _custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaNode* parent);
+
+	String get_field_name() const;
+	void update_with(const Schema* schema);
+	Schema* take_schema();
 
 	ResourceSchemaNode();
 	~ResourceSchemaNode();
@@ -309,22 +322,22 @@ public:
 class ResourceSchemaInspectorProperty : public EditorProperty {
 	GODOT_CLASS(ResourceSchemaInspectorProperty, EditorProperty)
 private:
+	std::unordered_map<String, Schema*> properties_schema;
 	Button* btn;
 	VBoxContainer* properties;
 	int selected_idx = -1;
 	bool updating = false;
 
 	void _toggle_editor_visibility();
-	void _property_schema_changed(ResourceSchemaNode* node);
+	void _prop_schema_changed(ResourceSchemaNode* node);
 
 public:
 	static void _register_methods();
 	void _init();
-	std::unique_ptr<Schema> build();
 
 	void add_root_property(int pos = -1);
 	void remove_root_property(int pos = -1);
-	void schema_changed();
+	void emit_something_changed();
 
 	void update_property();
 
