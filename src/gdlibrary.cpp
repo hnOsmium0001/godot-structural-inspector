@@ -1,4 +1,3 @@
-
 #include "Plugin.hpp"
 #include "Property.hpp"
 

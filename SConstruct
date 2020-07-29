@@ -35,7 +35,7 @@ if env['p'] != '':
 
 if env['platform'] == '':
     print("No valid target platform selected.")
-    quit();
+    quit()
 
 # For the reference:
 # - CCFLAGS are compilation flags shared between C and C++
@@ -107,3 +107,7 @@ Default(library)
 
 # Generates help for the -h scons option.
 Help(opts.GenerateHelpText(env))
+
+# Generate compile_commands.json for this project, used by intellisense tools
+env.Tool('compilation_db')
+env.CompilationDatabase('compile_commands.json')

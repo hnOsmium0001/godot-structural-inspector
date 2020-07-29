@@ -4,4 +4,15 @@
 
 [resource]
 script = ExtResource( 1 )
-properties = [  ]
+properties = [ {
+"element_type": {
+"properties": [  ],
+"type": "struct"
+},
+"max_elements": -2147483648,
+"min_elements": -2147483648,
+"type": "array"
+}, {
+"properties": [  ],
+"type": "struct"
+} ]
