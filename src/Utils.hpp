@@ -1,8 +1,12 @@
 #pragma once
 
+#include <Button.hpp>
+#include <Godot.hpp>
+#include <String.hpp>
+#include <functional>
 #include <iterator>
 
-namespace godot::structural_editor {
+namespace godot::structural_inspector {
 
 template <class T>
 class Iterator {
@@ -11,25 +15,55 @@ public:
 	virtual T next() = 0;
 };
 
-// template <class StdIter>
-// class StdBackedIterator : public Iterator<typename std::iterator_traits<StdIter>::reference_type> {
-// private:
-// 	StdIter begin;
-// 	StdIter end;
+template <class StdIter>
+class StdBackedIterator : public Iterator<typename std::iterator_traits<StdIter>::reference> {
+public:
+	using Iter = StdIter;
+	using Distance = typename std::iterator_traits<StdIter>::difference_type;
+	using Value = typename std::iterator_traits<StdIter>::value_type;
+	using PtrValue = typename std::iterator_traits<StdIter>::pointer;
+	using RefValue = typename std::iterator_traits<StdIter>::reference;
+	using Category = typename std::iterator_traits<StdIter>::iterator_category;
 
-// public:
-// 	StdBackedIterator(StdIter begin, StdIter end) :
-// 			begin{ begin }, end{ end } {}
-	
-// 	bool has_next() const override {
-// 		return begin != end;
-// 	}
+private:
+	StdIter begin;
+	StdIter end;
 
-// 	T next() override {
-// 		auto& val = *begin;
-// 		++begin;
-// 		return val;
-// 	}
-// };
+public:
+	StdBackedIterator(StdIter begin, StdIter end) :
+			begin{ begin }, end{ end } {}
 
-} // namespace godot::structural_editor
+	bool has_next() const override {
+		return begin != end;
+	}
+
+	RefValue next() override {
+		auto& val = *begin;
+		++begin;
+		return val;
+	}
+};
+
+class NXButton : public Button {
+	GODOT_CLASS(NXButton, Button)
+private:
+	String icon_name;
+
+	void _notification(int what);
+	void _apply_icon();
+
+public:
+	static void _register_methods();
+	void _init();
+	void _custom_init(const String& icon_name);
+
+	NXButton();
+	~NXButton();
+};
+
+} // namespace godot::structural_inspector
+
+template <>
+struct std::hash<godot::String> {
+	size_t operator()(const godot::String& str) const noexcept;
+};

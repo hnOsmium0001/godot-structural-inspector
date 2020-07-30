@@ -1,374 +1,20 @@
 #include "Property.hpp"
+#include "Schema.hpp"
 
 #include <CheckBox.hpp>
 #include <GlobalConstants.hpp>
 #include <InputEvent.hpp>
 #include <InputEventMouseButton.hpp>
 #include <InputEventMouseMotion.hpp>
+#include <JSON.hpp>
 #include <MenuButton.hpp>
 #include <PopupMenu.hpp>
-#include <Texture.hpp>
+#include <SpinBox.hpp>
 #include <algorithm>
 #include <utility>
 
-#include <JSON.hpp>
-
 using namespace godot;
-using namespace godot::structural_editor;
-
-void NXButton::_notification(int what) {
-	switch (what) {
-		case NOTIFICATION_READY: {
-			call_deferred("_apply_icon");
-		} break;
-		default: {
-		} break;
-	}
-}
-
-void NXButton::_apply_icon() {
-	set_button_icon(get_icon(icon_name, "EditorIcons"));
-}
-
-void NXButton::_register_methods() {
-	register_method("_notification", &NXButton::_notification);
-	register_method("_apply_icon", &NXButton::_apply_icon);
-}
-
-void NXButton::_init() {
-	set_flat(true);
-}
-
-void NXButton::_custom_init(const String& icon_name) {
-	this->icon_name = icon_name;
-}
-
-NXButton::NXButton() {
-}
-
-NXButton::~NXButton() {
-}
-
-std::unique_ptr<Schema> Schema::clone_uptr() const {
-	return std::unique_ptr<Schema>(clone());
-}
-
-Variant StructSchema::create_value() const {
-	return Dictionary{};
-}
-
-Control* StructSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
-	auto editor = StructEditor::_new();
-	editor->_custom_init(this, target, path);
-	if (name) {
-		editor->set_property_name(*name);
-	}
-	return editor;
-}
-
-void StructSchema::update_edit(Control* edit, const Variant& data) const {
-	auto editor = static_cast<StructEditor*>(edit);
-	Dictionary data_source = data;
-	for (int i = 0; i < fields.size(); ++i) {
-		auto& field = fields[i];
-		field.def->update_edit(
-				static_cast<Control*>(editor->fields->get_child(i)),
-				data_source[field.name]);
-	}
-}
-
-EditorProperty* StructSchema::create_property() const {
-	auto prop = CommonInspectorProperty::_new();
-	auto editor = StructEditor::_new();
-	editor->_custom_init(this, prop, Array::make());
-	prop->_custom_init(this, editor);
-	return prop;
-}
-
-StructSchema* StructSchema::clone() const {
-	auto that = new StructSchema();
-	for (auto& [name, field] : fields) {
-		that->fields.push_back({ name, field->clone_uptr() });
-	}
-	return that;
-}
-
-Variant ArraySchema::create_value() const {
-	return Array{};
-}
-
-Control* ArraySchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
-	auto editor = ArrayEditor::_new();
-	editor->_custom_init(this, target, path);
-	if (name) {
-		editor->set_property_name(*name);
-	}
-	return editor;
-}
-
-void ArraySchema::update_edit(Control* edit, const Variant& data) const {
-	auto editor = static_cast<ArrayEditor*>(data);
-	Array data_source = data;
-	for (int i = 0; i < data_source.size(); ++i) {
-		auto field = static_cast<Control*>(editor->elements->get_child(i));
-		element_type->update_edit(field, data_source[i]);
-	}
-}
-
-EditorProperty* ArraySchema::create_property() const {
-	auto prop = CommonInspectorProperty::_new();
-	auto editor = ArrayEditor::_new();
-	editor->_custom_init(this, prop, Array::make());
-	prop->_custom_init(this, editor);
-	return prop;
-}
-
-ArraySchema* ArraySchema::clone() const {
-	auto that = new ArraySchema();
-	that->element_type = element_type->clone_uptr();
-	that->min_elements = min_elements;
-	that->max_elements = max_elements;
-	return that;
-}
-
-Variant StringSchema::create_value() const {
-	return "";
-}
-
-Control* StringSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
-	// TODO filtering support
-
-	auto edit = LineEdit::_new();
-	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
-	edit->connect("text_changed", target, "update_value", path);
-	if (name) {
-		auto label = Label::_new();
-		label->set_text(*name);
-		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
-
-		auto box = HBoxContainer::_new();
-		box->add_child(label);
-		box->add_child(edit);
-		return box;
-	} else {
-		return edit;
-	}
-}
-
-void StringSchema::update_edit(Control* edit, const Variant& data) const {
-	String text = data;
-	if (auto line_edit = Object::cast_to<LineEdit>(edit)) {
-		line_edit->set_text(data);
-		return;
-	}
-	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
-		auto line_edit = static_cast<LineEdit*>(editor->get_child(1));
-		line_edit->set_text(text);
-		return;
-	}
-}
-
-EditorProperty* StringSchema::create_property() const {
-	return CommonInspectorProperty::_new();
-}
-
-StringSchema* StringSchema::clone() const {
-	auto that = new StringSchema();
-	if (pattern.is_valid()) {
-		that->pattern = Ref{ RegEx::_new() };
-		// Must success, since our pattern is valid
-		that->pattern->compile(pattern->get_pattern());
-	}
-	return that;
-}
-
-Variant EnumSchema::create_value() const {
-	return 0;
-}
-
-Control* EnumSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
-	auto edit = OptionButton::_new();
-	for (auto& [name, id] : elements) {
-		edit->get_popup()->add_item(name, id);
-	}
-	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
-	edit->connect("item_selected", target, "update_value", path);
-	if (name) {
-		auto label = Label::_new();
-		label->set_text(*name);
-		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
-
-		auto box = HBoxContainer::_new();
-		box->add_child(label);
-		box->add_child(edit);
-		return box;
-	} else {
-		return edit;
-	}
-}
-
-void EnumSchema::update_edit(Control* edit, const Variant& data) const {
-	int id = data;
-	if (auto option_btn = Object::cast_to<OptionButton>(edit)) {
-		option_btn->select(option_btn->get_item_index(id));
-		return;
-	}
-	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
-		auto option_btn = static_cast<OptionButton*>(editor->get_child(1));
-		option_btn->select(option_btn->get_item_index(id));
-		return;
-	}
-}
-
-EditorProperty* EnumSchema::create_property() const {
-	return CommonInspectorProperty::_new();
-}
-
-EnumSchema* EnumSchema::clone() const {
-	auto that = new EnumSchema();
-	for (auto& element : elements) {
-		that->elements.push_back(element);
-	}
-	return that;
-}
-
-Variant IntSchema::create_value() const {
-	return 0;
-}
-
-Control* IntSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
-	auto edit = SpinBox::_new();
-	edit->set_min(static_cast<real_t>(min_value));
-	edit->set_max(static_cast<real_t>(max_value));
-	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
-	edit->connect("value_changed", target, "update_value", path);
-	if (name) {
-		auto label = Label::_new();
-		label->set_text(*name);
-		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
-
-		auto box = HBoxContainer::_new();
-		box->add_child(label);
-		box->add_child(edit);
-		return box;
-	} else {
-		return edit;
-	}
-}
-
-void IntSchema::update_edit(Control* edit, const Variant& data) const {
-	int value = data;
-	if (auto spin_box = Object::cast_to<SpinBox>(edit)) {
-		spin_box->set_value(value);
-		return;
-	}
-	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
-		auto spin_box = static_cast<SpinBox*>(editor->get_child(1));
-		spin_box->set_value(value);
-		return;
-	}
-}
-
-EditorProperty* IntSchema::create_property() const {
-	return CommonInspectorProperty::_new();
-}
-
-IntSchema* IntSchema::clone() const {
-	auto that = new IntSchema();
-	that->min_value = min_value;
-	that->max_value = max_value;
-	return that;
-}
-
-Variant FloatSchema::create_value() const {
-	return 0.0;
-}
-
-Control* FloatSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
-	auto edit = SpinBox::_new();
-	edit->set_min(min_value);
-	edit->set_max(max_value);
-	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
-	edit->connect("value_changed", target, "update_value", path);
-	if (name) {
-		auto label = Label::_new();
-		label->set_text(*name);
-		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
-
-		auto box = HBoxContainer::_new();
-		box->add_child(label);
-		box->add_child(edit);
-		return box;
-	} else {
-		return edit;
-	}
-}
-
-void FloatSchema::update_edit(Control* edit, const Variant& data) const {
-	real_t value = data;
-	if (auto spin_box = Object::cast_to<SpinBox>(edit)) {
-		spin_box->set_value(value);
-		return;
-	}
-	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
-		auto spin_box = static_cast<SpinBox*>(editor->get_child(1));
-		spin_box->set_value(value);
-		return;
-	}
-}
-
-EditorProperty* FloatSchema::create_property() const {
-	return CommonInspectorProperty::_new();
-}
-
-FloatSchema* FloatSchema::clone() const {
-	auto that = new FloatSchema();
-	that->min_value = min_value;
-	that->max_value = max_value;
-	return that;
-}
-
-Variant BoolSchema::create_value() const {
-	return false;
-}
-
-Control* BoolSchema::create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const {
-	auto edit = CheckBox::_new();
-	edit->connect("toggled", target, "update_value", path);
-	if (name) {
-		auto label = Label::_new();
-		label->set_text(*name);
-		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
-
-		auto box = HBoxContainer::_new();
-		box->add_child(label);
-		box->add_child(edit);
-		return box;
-	} else {
-		return edit;
-	}
-}
-
-void BoolSchema::update_edit(Control* edit, const Variant& data) const {
-	bool value = data;
-	if (auto checkbox = Object::cast_to<CheckBox>(edit)) {
-		checkbox->set_pressed(value);
-		return;
-	}
-	if (auto editor = Object::cast_to<HBoxContainer>(edit)) {
-		auto checkbox = static_cast<CheckBox*>(editor->get_child(1));
-		checkbox->set_pressed(value);
-		return;
-	}
-}
-
-EditorProperty* BoolSchema::create_property() const {
-	return CommonInspectorProperty::_new();
-}
-
-BoolSchema* BoolSchema::clone() const {
-	return new BoolSchema();
-}
+using namespace godot::structural_inspector;
 
 void ResourceSchema::_register_methods() {
 	register_property("properties", &ResourceSchema::properties, Array{});
@@ -799,25 +445,6 @@ static Label* get_nc_label(Control* control) {
 	return static_cast<Label*>(parent->get_child(LABEL_POS));
 }
 
-ResourceSchemaNode* ResourceSchemaNode::_make_child() {
-	auto child = ResourceSchemaNode::_new();
-	child->_custom_init(root, this);
-	auto binding = Array::make(child);
-	child->connect("schema_changed", this, "_child_schema_changed", binding);
-	child->connect("field_name_changed", this, "_child_field_name_changed", binding);
-	child->connect("clicked", this, "_child_clicked", binding);
-	return child;
-}
-
-String ResourceSchemaNode::get_field_name() const {
-	return field_name->get_text();
-}
-
-void ResourceSchemaNode::set_field_name(const String& name) {
-	::get_nc_line(field_name)->set_visible(true);
-	field_name->set_text(name);
-}
-
 static VBoxContainer* create_enum_value_edit(const String& name, int id, Object* target) {
 	auto enum_value = VBoxContainer::_new();
 	auto binding = Array::make(enum_value);
@@ -833,137 +460,21 @@ static VBoxContainer* create_enum_value_edit(const String& name, int id, Object*
 	return enum_value;
 }
 
-void ResourceSchemaNode::update_with(Schema* schema) {
-	if (auto other = dynamic_cast<StructSchema*>(schema)) {
-		if (owns_schema) delete this->schema;
-		this->schema = other;
-		_type_selected(STRUCT, false);
-		type_edit->select(STRUCT);
-
-		for (int i = 0; i < list->get_child_count(); ++i) {
-			list->get_child(i)->free();
-		}
-		for (auto& field : other->fields) {
-			auto child = _make_child();
-			list->add_child(child);
-			child->update_with(field.def.get());
-			child->set_field_name(field.name);
-		}
-	} else if (auto other = dynamic_cast<ArraySchema*>(schema)) {
-		if (owns_schema) delete this->schema;
-		this->schema = other;
-		_type_selected(ARRAY, false);
-		type_edit->select(ARRAY);
-
-		min_value->set_value(other->min_elements);
-		max_value->set_value(other->max_elements);
-		// static_cast<ResourceSchemaNode*>(list->get_child(0))->update_with(other->element_type.get());
-		if (auto node = Object::cast_to<ResourceSchemaNode>(list->get_child(0))) {
-			node->update_with(other->element_type.get());
-		}
-	} else if (auto other = dynamic_cast<StringSchema*>(schema)) {
-		if (owns_schema) delete this->schema;
-		this->schema = other;
-		_type_selected(STRING, false);
-		type_edit->select(STRING);
-
-		if (other->pattern.is_valid()) {
-			pattern->set_text(other->pattern->get_pattern());
-		}
-	} else if (auto other = dynamic_cast<EnumSchema*>(schema)) {
-		if (owns_schema) delete this->schema;
-		this->schema = other;
-		_type_selected(ENUM, false);
-		type_edit->select(ENUM);
-
-		for (int i = 0; i < list->get_child_count(); ++i) {
-			list->get_child(i)->free();
-		}
-		for (auto& [name, id] : other->elements) {
-			list->add_child(::create_enum_value_edit(name, id, this));
-		}
-	} else if (auto other = dynamic_cast<IntSchema*>(schema)) {
-		if (owns_schema) delete this->schema;
-		this->schema = other;
-		_type_selected(INT, false);
-		type_edit->select(INT);
-
-		min_value->set_value(other->min_value);
-		max_value->set_value(other->max_value);
-	} else if (auto other = dynamic_cast<FloatSchema*>(schema)) {
-		if (owns_schema) delete this->schema;
-		this->schema = other;
-		_type_selected(FLOAT, false);
-		type_edit->select(FLOAT);
-
-		min_value->set_value(other->min_value);
-		max_value->set_value(other->max_value);
-	} else if (auto other = dynamic_cast<BoolSchema*>(schema)) {
-		if (owns_schema) delete this->schema;
-		this->schema = other;
-		_type_selected(BOOL, false);
-		type_edit->select(BOOL);
-	}
-}
-
-const Schema* ResourceSchemaNode::get_schema() const {
-	return schema;
-}
-
-Schema* ResourceSchemaNode::get_schema() {
-	return schema;
-}
-
-Schema* ResourceSchemaNode::take_schema() {
-	owns_schema = false;
-	return schema;
+ResourceSchemaNode* ResourceSchemaNode::_make_child() {
+	auto child = ResourceSchemaNode::_new();
+	child->_custom_init(root, this);
+	auto binding = Array::make(child);
+	child->connect("schema_changed", this, "_child_schema_changed", binding);
+	child->connect("field_name_changed", this, "_child_field_name_changed", binding);
+	child->connect("clicked", this, "_child_clicked", binding);
+	return child;
 }
 
 bool ResourceSchemaNode::_is_mouse_inside() {
 	return get_global_rect().has_point(get_global_mouse_position());
 }
 
-void ResourceSchemaNode::_input(Ref<InputEvent> event) {
-	if (auto mb = Object::cast_to<InputEventMouseButton>(event.ptr())) {
-		if (mb->get_button_index() == GlobalConstants::BUTTON_LEFT && mb->is_pressed() && _is_mouse_inside()) {
-			emit_signal("clicked");
-		}
-		return;
-	}
-	if (auto mm = Object::cast_to<InputEventMouseMotion>(event.ptr())) {
-		if (bool current = _is_mouse_inside(); mouse_inside != current) {
-			mouse_inside = current;
-			update();
-		}
-		return;
-	}
-}
-
-void ResourceSchemaNode::_notification(int what) {
-	switch (what) {
-		case NOTIFICATION_READY: {
-			_type_selected(STRUCT);
-			type_edit->select(STRUCT);
-
-			if (parent && parent->schema_id == STRUCT) {
-				::get_nc_line(field_name)->set_visible(true);
-			}
-		} break;
-
-		case NOTIFICATION_RESIZED: {
-			update();
-		} break;
-		case NOTIFICATION_DRAW: {
-			// First is regular border color, second is hovered border color
-			static const Color colors[] = { Color::hex(0x262C3BFF), Color::hex(0x333B4FFF) };
-			draw_rect(Rect2{ 4, 4, get_size().x - 4 * 2, get_size().y - 4 * 2 }, colors[mouse_inside], false, 2.0F);
-		} break;
-		default: {
-		} break;
-	}
-}
-
-void ResourceSchemaNode::_type_selected(int id, bool rebind_schema) {
+void ResourceSchemaNode::_type_selected_swap(int id, Schema* swap_out) {
 	if (schema_id == id) {
 		return;
 	}
@@ -1013,7 +524,7 @@ void ResourceSchemaNode::_type_selected(int id, bool rebind_schema) {
 			// Do nothing, for schema_id == UNKNOWN
 		} break;
 	}
-	if (rebind_schema && owns_schema) {
+	if (owns_schema) {
 		delete schema;
 		schema = nullptr;
 	}
@@ -1024,10 +535,9 @@ void ResourceSchemaNode::_type_selected(int id, bool rebind_schema) {
 			remove->set_visible(true);
 			message->set_visible(true);
 			list->set_visible(true);
-			if (rebind_schema) {
-				schema = new StructSchema();
-				schema_id = STRUCT;
-			}
+
+			schema = swap_out ? swap_out : new StructSchema();
+			schema_id = STRUCT;
 			emit_signal("schema_changed");
 		} break;
 		case ARRAY: {
@@ -1038,11 +548,9 @@ void ResourceSchemaNode::_type_selected(int id, bool rebind_schema) {
 			::get_nc_label(max_value)->set_text("Max elements");
 			::get_nc_line(max_value)->set_visible(true);
 
-			auto array = new ArraySchema();
-			if (rebind_schema) {
-				schema = array;
-				schema_id = ARRAY;
-			}
+			auto array = swap_out ? dynamic_cast<ArraySchema*>(swap_out) : new ArraySchema();
+			schema = array;
+			schema_id = ARRAY;
 			// This will immediately emit a `schema_changed` signal (caused by `add_child` -> ready), we need our schema setup before that
 			list->add_child(_make_child());
 			min_value->set_value(array->min_elements);
@@ -1051,10 +559,9 @@ void ResourceSchemaNode::_type_selected(int id, bool rebind_schema) {
 		} break;
 		case STRING: {
 			::get_nc_line(pattern)->set_visible(true);
-			if (rebind_schema) {
-				schema = new StringSchema();
-				schema_id = STRING;
-			}
+
+			schema = swap_out ? swap_out : new StringSchema();
+			schema_id = STRING;
 			emit_signal("schema_changed");
 		} break;
 		case ENUM: {
@@ -1062,10 +569,9 @@ void ResourceSchemaNode::_type_selected(int id, bool rebind_schema) {
 			remove->set_visible(true);
 			message->set_visible(true);
 			list->set_visible(true);
-			if (rebind_schema) {
-				schema = new EnumSchema();
-				schema_id = ENUM;
-			}
+
+			schema = swap_out ? swap_out : new EnumSchema();
+			schema_id = ENUM;
 			emit_signal("schema_changed");
 		} break;
 		case INT: {
@@ -1073,11 +579,10 @@ void ResourceSchemaNode::_type_selected(int id, bool rebind_schema) {
 			::get_nc_line(min_value)->set_visible(true);
 			::get_nc_label(max_value)->set_text("Max value");
 			::get_nc_line(max_value)->set_visible(true);
-			auto sint = new IntSchema();
-			if (rebind_schema) {
-				schema = sint;
-				schema_id = INT;
-			}
+
+			auto sint = swap_out ? dynamic_cast<IntSchema*>(swap_out) : new IntSchema();
+			schema = sint;
+			schema_id = INT;
 			min_value->set_value(sint->min_value);
 			max_value->set_value(sint->max_value);
 			emit_signal("schema_changed");
@@ -1087,32 +592,75 @@ void ResourceSchemaNode::_type_selected(int id, bool rebind_schema) {
 			::get_nc_line(min_value)->set_visible(true);
 			::get_nc_label(max_value)->set_text("Max value");
 			::get_nc_line(max_value)->set_visible(true);
-			auto sfloat = new FloatSchema();
-			if (rebind_schema) {
-				schema = sfloat;
-				schema_id = FLOAT;
-			}
+
+			auto sfloat = swap_out ? dynamic_cast<FloatSchema*>(swap_out) : new FloatSchema();
+			schema = sfloat;
+			schema_id = FLOAT;
 			min_value->set_value(sfloat->min_value);
 			max_value->set_value(sfloat->max_value);
 			emit_signal("schema_changed");
 		} break;
 		case BOOL: {
-			if (rebind_schema) {
-				schema = new BoolSchema();
-				schema_id = BOOL;
-			}
+			schema = swap_out ? swap_out : new BoolSchema();
+			schema_id = BOOL;
 			emit_signal("schema_changed");
 		} break;
 		default: {
-			if (rebind_schema) {
-				schema = nullptr;
-				schema_id = UNKNOWN;
-			}
+			schema = nullptr;
+			schema_id = UNKNOWN;
 			ERR_PRINT("Unknown type id " + String::num_int64(id));
 		} break;
 	}
 
+	schema_id = static_cast<NodeType>(id);
 	root->emit_something_changed();
+}
+
+void ResourceSchemaNode::_input(Ref<InputEvent> event) {
+	if (auto mb = Object::cast_to<InputEventMouseButton>(event.ptr())) {
+		if (mb->get_button_index() == GlobalConstants::BUTTON_LEFT && mb->is_pressed() && _is_mouse_inside()) {
+			emit_signal("clicked");
+		}
+		return;
+	}
+	if (auto mm = Object::cast_to<InputEventMouseMotion>(event.ptr())) {
+		if (bool current = _is_mouse_inside(); mouse_inside != current) {
+			mouse_inside = current;
+			update();
+		}
+		return;
+	}
+}
+
+void ResourceSchemaNode::_notification(int what) {
+	switch (what) {
+		case NOTIFICATION_READY: {
+			// When this schema node is restored from a .tres file, update_with() will be called before _ready()
+			if (schema_id == UNKNOWN) {
+				_type_selected(STRUCT);
+				type_edit->select(STRUCT);
+			}
+
+			if (parent && parent->schema_id == STRUCT) {
+				::get_nc_line(field_name)->set_visible(true);
+			}
+		} break;
+
+		case NOTIFICATION_RESIZED: {
+			update();
+		} break;
+		case NOTIFICATION_DRAW: {
+			// First is regular border color, second is hovered border color
+			static const Color colors[] = { Color::hex(0x262C3BFF), Color::hex(0x333B4FFF) };
+			draw_rect(Rect2{ 4, 4, get_size().x - 4 * 2, get_size().y - 4 * 2 }, colors[mouse_inside], false, 2.0F);
+		} break;
+		default: {
+		} break;
+	}
+}
+
+void ResourceSchemaNode::_type_selected(int id) {
+	_type_selected_swap(id, nullptr);
 }
 
 void ResourceSchemaNode::_add_list_item() {
@@ -1402,6 +950,87 @@ void ResourceSchemaNode::_custom_init(ResourceSchemaInspectorProperty* root, Res
 	this->parent = parent;
 }
 
+void ResourceSchemaNode::update_with(Schema* schema) {
+	if (auto other = dynamic_cast<StructSchema*>(schema)) {
+		// We take ownership of this schema now
+		_type_selected_swap(STRUCT, other);
+		type_edit->select(STRUCT);
+
+		for (int i = 0; i < list->get_child_count(); ++i) {
+			list->get_child(i)->free();
+		}
+		for (auto& field : other->fields) {
+			auto child = _make_child();
+			// update_with() takes the ownership of parameter `schema`. But it will also fire signal `schema_changed`, causing us to take the ownership from it
+			// Use release() instead of get() to prevent us freeing the pointer while taking the ownership back
+			child->update_with(field.def.release());
+			child->set_field_name(field.name);
+			list->add_child(child);
+		}
+	} else if (auto other = dynamic_cast<ArraySchema*>(schema)) {
+		_type_selected_swap(ARRAY, other);
+		type_edit->select(ARRAY);
+
+		min_value->set_value(other->min_elements);
+		max_value->set_value(other->max_elements);
+		get_child_node(0)->update_with(other->element_type.release());
+	} else if (auto other = dynamic_cast<StringSchema*>(schema)) {
+		_type_selected_swap(STRING, other);
+		type_edit->select(STRING);
+
+		if (other->pattern.is_valid()) {
+			pattern->set_text(other->pattern->get_pattern());
+		}
+	} else if (auto other = dynamic_cast<EnumSchema*>(schema)) {
+		_type_selected_swap(ENUM, other);
+		type_edit->select(ENUM);
+
+		for (int i = 0; i < list->get_child_count(); ++i) {
+			list->get_child(i)->free();
+		}
+		for (auto& [name, id] : other->elements) {
+			list->add_child(::create_enum_value_edit(name, id, this));
+		}
+	} else if (auto other = dynamic_cast<IntSchema*>(schema)) {
+		_type_selected_swap(INT, other);
+		type_edit->select(INT);
+
+		min_value->set_value(other->min_value);
+		max_value->set_value(other->max_value);
+	} else if (auto other = dynamic_cast<FloatSchema*>(schema)) {
+		_type_selected_swap(FLOAT, other);
+		type_edit->select(FLOAT);
+
+		min_value->set_value(other->min_value);
+		max_value->set_value(other->max_value);
+	} else if (auto other = dynamic_cast<BoolSchema*>(schema)) {
+		_type_selected_swap(BOOL, other);
+		type_edit->select(BOOL);
+	}
+}
+
+String ResourceSchemaNode::get_field_name() const {
+	return field_name->get_text();
+}
+
+void ResourceSchemaNode::set_field_name(const String& name) {
+	::get_nc_line(field_name)->set_visible(true);
+	field_name->set_text(name);
+}
+
+ResourceSchemaNode* ResourceSchemaNode::get_child_node(int i) {
+	return Object::cast_to<ResourceSchemaNode>(list->get_child(i));
+}
+
+Schema* ResourceSchemaNode::get_schema() {
+	return schema;
+}
+
+Schema* ResourceSchemaNode::take_schema() {
+	owns_schema = false;
+	return schema;
+}
+
 ResourceSchemaNode::ResourceSchemaNode() {
 }
 
@@ -1501,16 +1130,20 @@ void ResourceSchemaInspectorProperty::update_property() {
 		properties->get_child(i)->free();
 	}
 
-	std::unordered_map<String, Schema*> info;
 	Array data = get_edited_object()->get(get_edited_property());
 	for (int i = 0; i < data.size(); ++i) {
 		Dictionary dict = data[i];
-		info.insert({ dict["name"], ::parse_schema(dict).release() });
-	}
-	for (auto& [name, schema] : info) {
-		auto prop = add_root_property();
-		prop->update_with(schema);
-		prop->set_field_name(name);
+		// If parsing schema failed, we skip this entry
+		if (auto schema = ::parse_schema(dict)) {
+			auto prop = ResourceSchemaNode::_new();
+			prop->_custom_init(this, nullptr);
+			prop->update_with(schema.release());
+			prop->set_field_name(dict["name"]);
+			prop->connect("clicked", this, "_prop_clicked", Array::make(prop));
+			properties->add_child(prop);
+		} else {
+			ERR_PRINT("Error while parsing schema entry: " + JSON::get_singleton()->print(dict));
+		}
 	}
 
 	updating = false;

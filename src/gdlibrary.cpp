@@ -1,5 +1,6 @@
 #include "Plugin.hpp"
 #include "Property.hpp"
+#include "Utils.hpp"
 
 #include <Godot.hpp>
 
@@ -14,11 +15,11 @@ extern "C" void GDN_EXPORT godot_gdnative_terminate(godot_gdnative_terminate_opt
 extern "C" void GDN_EXPORT godot_nativescript_init(void* handle) {
 	godot::Godot::nativescript_init(handle);
 
-	using namespace godot::structural_editor;
+	using namespace godot::structural_inspector;
+	godot::register_tool_class<NXButton>();
 	godot::register_tool_class<Plugin>();
 	godot::register_tool_class<InspectorPlugin>();
 	godot::register_tool_class<ResourceSchema>();
-	godot::register_tool_class<NXButton>();
 	godot::register_tool_class<StructEditor>();
 	godot::register_tool_class<ArrayEditor>();
 	godot::register_tool_class<CommonInspectorProperty>();

@@ -1,18 +1,74 @@
 #!python
-import os, subprocess
+import os, subprocess, sys
+
+# Workaround for MinGW. See:
+# http://www.scons.org/wiki/LongCmdLinesOnWin32
+if (os.name=="nt"):
+    import subprocess
+
+    def mySubProcess(cmdline,env):
+        #print "SPAWNED : " + cmdline
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, startupinfo=startupinfo, shell = False, env = env)
+        data, err = proc.communicate()
+        rv = proc.wait()
+        if rv:
+            print("=====")
+            print(err.decode("utf-8"))
+            print("=====")
+        return rv
+
+    def mySpawn(sh, escape, cmd, args, env):
+
+        newargs = ' '.join(args[1:])
+        cmdline = cmd + " " + newargs
+
+        rv=0
+        if len(cmdline) > 32000 and cmd.endswith("ar") :
+            cmdline = cmd + " " + args[1] + " " + args[2] + " "
+            for i in range(3,len(args)) :
+                rv = mySubProcess( cmdline + args[i], env )
+                if rv :
+                    break
+        else:
+            rv = mySubProcess( cmdline, env )
+
+        return rv
 
 opts = Variables([], ARGUMENTS)
 
 # Gets the standard flags CC, CCX, etc.
 env = DefaultEnvironment()
 
+# Generate compile_commands.json for this project, used by intellisense tools
+env.Tool('compilation_db')
+env.CompilationDatabase('compile_commands.json')
+
+# Try to detect the host platform automatically.
+# This is used if no `platform` argument is passed
+if sys.platform.startswith('linux'):
+    host_platform = 'linux'
+elif sys.platform == 'darwin':
+    host_platform = 'osx'
+elif sys.platform == 'win32' or sys.platform == 'msys':
+    host_platform = 'windows'
+else:
+    raise ValueError(
+        'Could not detect platform automatically, please specify with '
+        'platform=<platform>'
+    )
+
 # Define our options
 opts.Add(EnumVariable('target', "Compilation target", 'debug', ['d', 'debug', 'r', 'release']))
-opts.Add(EnumVariable('platform', "Compilation platform", '', ['', 'windows', 'linuxbsd', 'linux', 'osx']))
-opts.Add(EnumVariable('p', "Compilation target, alias for 'platform'", '', ['', 'windows', 'linuxbsd', 'linux', 'osx']))
+opts.Add(EnumVariable('platform', "Compilation platform", host_platform, ['', 'windows', 'x11', 'linux', 'osx']))
+opts.Add(EnumVariable('p', "Compilation target, alias for 'platform'", '', ['', 'windows', 'x11', 'linux', 'osx']))
 opts.Add(BoolVariable('use_llvm', "Use the LLVM / Clang compiler", 'no'))
+opts.Add(BoolVariable('use_mingw', 'Use the MinGW compiler instead of MSVC - only effective on Windows', False))
 opts.Add(PathVariable('target_path', 'The path where the lib is installed.', 'project/bin/'))
 opts.Add(PathVariable('target_name', 'The library name.', 'libgd_structural_inspector', PathVariable.PathAccept))
+opts.Add(BoolVariable('vsproj', 'Generate a Visual Studio solution - only effective on Windows', False))
 
 # Local dependency paths, adapt them to your setup
 godot_headers_path = "godot-cpp/godot_headers/"
@@ -35,55 +91,65 @@ if env['p'] != '':
 
 if env['platform'] == '':
     print("No valid target platform selected.")
-    quit()
-
-# For the reference:
-# - CCFLAGS are compilation flags shared between C and C++
-# - CFLAGS are for C-specific compilation flags
-# - CXXFLAGS are for C++-specific compilation flags
-# - CPPFLAGS are for pre-processor flags
-# - CPPDEFINES are for pre-processor defines
-# - LINKFLAGS are for linking flags
+    quit();
 
 # Check our platform specifics
 if env['platform'] == "osx":
     env['target_path'] += 'osx/'
     cpp_library += '.osx'
-    env.Append(CCFLAGS=['-arch', 'x86_64'])
-    env.Append(CXXFLAGS=['-std=c++17'])
-    env.Append(LINKFLAGS=['-arch', 'x86_64'])
     if env['target'] in ('debug', 'd'):
-        env.Append(CCFLAGS=['-g', '-O2'])
+        env.Append(CCFLAGS = ['-g','-O2', '-arch', 'x86_64', '-std=c++17'])
+        env.Append(LINKFLAGS = ['-arch', 'x86_64'])
     else:
-        env.Append(CCFLAGS=['-g', '-O3'])
+        env.Append(CCFLAGS = ['-g','-O3', '-arch', 'x86_64', '-std=c++17'])
+        env.Append(LINKFLAGS = ['-arch', 'x86_64'])
 
-elif env['platform'] in ('linuxbsd', 'linux'):
-    env['target_path'] += 'linuxbsd/'
+elif env['platform'] in ('x11', 'linux'):
+    env['target_path'] += 'x11/'
     cpp_library += '.linux'
-    env.Append(CCFLAGS=['-fPIC'])
-    env.Append(CXXFLAGS=['-std=c++17'])
     if env['target'] in ('debug', 'd'):
-        env.Append(CCFLAGS=['-g3', '-Og'])
+        env.Append(CCFLAGS = ['-fPIC', '-g3','-Og', '-std=c++17'])
     else:
-        env.Append(CCFLAGS=['-g', '-O3'])
+        env.Append(CCFLAGS = ['-fPIC', '-g','-O3', '-std=c++17'])
 
 elif env['platform'] == "windows":
     env['target_path'] += 'win64/'
     cpp_library += '.windows'
-    # This makes sure to keep the session environment variables on windows,
-    # that way you can run scons in a vs 2017 prompt and it will find all the required tools
-    env.Append(ENV=os.environ)
+    if host_platform == 'windows' and not env['use_mingw']:
+        # This makes sure to keep the session environment variables on windows,
+        # that way you can run scons in a vs 2017 prompt and it will find all the required tools
+        env.Append(ENV = os.environ)
 
-    env.Append(CPPDEFINES=['WIN32', '_WIN32', '_WINDOWS', '_CRT_SECURE_NO_WARNINGS'])
-    env.Append(CCFLAGS=['-W3', '-GR'])
-    env.Append(CXXFLAGS=['-std:c++17'])
-    if env['target'] in ('debug', 'd'):
-        env.Append(CPPDEFINES=['_DEBUG'])
-        env.Append(CCFLAGS=['-EHsc', '-MDd', '-ZI'])
-        env.Append(LINKFLAGS=['-DEBUG'])
-    else:
-        env.Append(CPPDEFINES=['NDEBUG'])
-        env.Append(CCFLAGS=['-O2', '-EHsc', '-MD'])
+        env.Append(CCFLAGS = ['-std:c++17', '-DWIN32', '-D_WIN32', '-D_WINDOWS', '-W3', '-GR', '-D_CRT_SECURE_NO_WARNINGS'])
+        if env['target'] in ('debug', 'd'):
+            target_name = env['target_path'] + env['target_name']
+            env.Append(CPPDEFINES = ['_DEBUG'])
+            env.Append(CCFLAGS = ['-D_DEBUG', '-EHsc', '-MDd', '-Zi', f'-Fd{target_name}.pdb'])
+            env.Append(LINKFLAGS = ['-DEBUG'])
+        else:
+            env.Append(CPPDEFINES = ['NDEBUG'])
+            env.Append(CCFLAGS = ['-O2', '-EHsc', '-DNDEBUG', '-MD'])
+    elif host_platform == 'linux' or host_platform == 'osx':
+        env['CXX'] = 'x86_64-w64-mingw32-g++'
+        env['AR'] = "x86_64-w64-mingw32-ar"
+        env['RANLIB'] = "x86_64-w64-mingw32-ranlib"
+        env['LINK'] = "x86_64-w64-mingw32-g++"
+    elif host_platform == 'windows' and env['use_mingw']:
+        env = env.Clone(tools=['mingw'])
+        env["SPAWN"] = mySpawn
+
+    if host_platform == 'linux' or host_platform == 'osx' or env['use_mingw']:
+        if env['target'] in ('debug', 'd'):
+            env.Append(CCFLAGS = ['-fPIC', '-g3','-Og', '-std=c++17'])
+        else:
+            env.Append(CCFLAGS = ['-fPIC', '-g0','-s','-O3', '-std=c++17'])
+
+        env.Append(LINKFLAGS=[
+            '--static',
+            '-Wl,--no-undefined',
+            '-static-libgcc',
+            '-static-libstdc++',
+        ])
 
 if env['target'] in ('debug', 'd'):
     cpp_library += '.debug'
@@ -93,7 +159,7 @@ else:
 cpp_library += '.' + str(bits)
 
 # make sure our binding library is properly includes
-env.Append(CPPPATH=['.', godot_headers_path, cpp_bindings_path + 'include/', cpp_bindings_path + 'include/core/', cpp_bindings_path + 'include/gen/'])
+env.Append(CPPPATH=['CDT/include/', '.', godot_headers_path, cpp_bindings_path + 'include/', cpp_bindings_path + 'include/core/', cpp_bindings_path + 'include/gen/'])
 env.Append(LIBPATH=[cpp_bindings_path + 'bin/'])
 env.Append(LIBS=[cpp_library])
 
@@ -103,11 +169,19 @@ sources = Glob('src/*.cpp')
 
 library = env.SharedLibrary(target=env['target_path'] + env['target_name'] , source=sources)
 
+if env['vsproj'] and env['platform'] == 'windows':
+    env.MSVSProject(
+        target = 'structural_inspector' + env['MSVSPROJECTSUFFIX'],
+        srcs = Glob('src/*.cpp', strings=True),
+        incs = Glob('src/*.hpp', strings=True),
+        localincs = [''],
+        resources = [''],
+        misc = [''],
+        buildtarget = library,
+        variant = 'Debug|Win32' if env['target'] in ('debug', 'd') else 'Release|Win32'
+    )
+
 Default(library)
 
 # Generates help for the -h scons option.
 Help(opts.GenerateHelpText(env))
-
-# Generate compile_commands.json for this project, used by intellisense tools
-env.Tool('compilation_db')
-env.CompilationDatabase('compile_commands.json')

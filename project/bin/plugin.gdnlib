@@ -7,7 +7,7 @@ reloadable=false
 
 [entry]
 
-OSX.64="res://bin/osx/libgd_structural_editor.dylib"
+OSX.64="res://bin/osx/libgd_structural_inspector.dylib"
 Windows.64="res://bin/win64/libgd_structural_inspector.dll"
 
 [dependencies]

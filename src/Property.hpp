@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Plugin.hpp"
+#include "Schema.hpp"
 #include "Utils.hpp"
 
 #include <Button.hpp>
@@ -12,138 +12,13 @@
 #include <LineEdit.hpp>
 #include <MarginContainer.hpp>
 #include <OptionButton.hpp>
-#include <RegEx.hpp>
 #include <Resource.hpp>
 #include <SpinBox.hpp>
 #include <VBoxContainer.hpp>
-#include <iterator>
 #include <memory>
-#include <optional>
-#include <string>
-#include <type_traits>
 #include <unordered_map>
-#include <vector>
 
-namespace godot::structural_editor {
-
-class NXButton : public Button {
-	GODOT_CLASS(NXButton, Button)
-private:
-	String icon_name;
-
-	void _notification(int what);
-	void _apply_icon();
-
-public:
-	static void _register_methods();
-	void _init();
-	void _custom_init(const String& icon_name);
-
-	NXButton();
-	~NXButton();
-};
-
-class CommonInspectorProperty;
-
-class Schema {
-public:
-	virtual Variant create_value() const = 0;
-	virtual Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const = 0;
-	virtual void update_edit(Control* edit, const Variant& data) const = 0;
-	virtual EditorProperty* create_property() const = 0;
-	virtual Schema* clone() const = 0;
-	virtual ~Schema() = default;
-
-	std::unique_ptr<Schema> clone_uptr() const;
-};
-
-class StructSchema : public Schema {
-public:
-	struct Field {
-		String name;
-		std::unique_ptr<Schema> def;
-	};
-	std::vector<Field> fields;
-
-	Variant create_value() const override;
-	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
-	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
-	StructSchema* clone() const override;
-};
-
-class ArraySchema : public Schema {
-public:
-	std::unique_ptr<Schema> element_type;
-	int min_elements = std::numeric_limits<int>::min();
-	int max_elements = std::numeric_limits<int>::max();
-
-	Variant create_value() const override;
-	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
-	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
-	ArraySchema* clone() const override;
-};
-
-class StringSchema : public Schema {
-public:
-	Ref<RegEx> pattern;
-
-	Variant create_value() const override;
-	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
-	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
-	StringSchema* clone() const override;
-};
-
-class EnumSchema : public Schema {
-public:
-	struct EnumValue {
-		String name;
-		int id;
-	};
-	std::vector<EnumValue> elements;
-
-	Variant create_value() const override;
-	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
-	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
-	EnumSchema* clone() const override;
-};
-
-class IntSchema : public Schema {
-public:
-	int min_value = std::numeric_limits<int>::min();
-	int max_value = std::numeric_limits<int>::max();
-
-	Variant create_value() const override;
-	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
-	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
-	IntSchema* clone() const override;
-};
-
-class FloatSchema : public Schema {
-public:
-	// real_t will be either float32 or float64 depending on the compilation options, so this will work
-	real_t min_value = std::numeric_limits<real_t>::min();
-	real_t max_value = std::numeric_limits<real_t>::max();
-
-	Variant create_value() const override;
-	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
-	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
-	FloatSchema* clone() const override;
-};
-
-class BoolSchema : public Schema {
-public:
-	Variant create_value() const override;
-	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
-	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
-	BoolSchema* clone() const override;
-};
+namespace godot::structural_inspector {
 
 class ResourceSchema : public Resource {
 	GODOT_CLASS(ResourceSchema, Resource)
@@ -305,10 +180,11 @@ private:
 
 	ResourceSchemaNode* _make_child();
 	bool _is_mouse_inside();
+	void _type_selected_swap(int id, Schema* swap_out);
 
 	void _input(Ref<InputEvent> event);
 	void _notification(int what);
-	void _type_selected(int id, bool rebind_schema = true);
+	void _type_selected(int id);
 	void _add_list_item();
 	void _toggle_remove_mode();
 	void _field_name_set(const String& field_name);
@@ -326,12 +202,12 @@ public:
 	static void _register_methods();
 	void _init();
 	void _custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaNode* parent);
+	void update_with(Schema* schema);
 
 	String get_field_name() const;
 	void set_field_name(const String& name);
 
-	void update_with(Schema* schema);
-	const Schema* get_schema() const;
+	ResourceSchemaNode* get_child_node(int i);
 	Schema* get_schema();
 	Schema* take_schema();
 
@@ -364,4 +240,4 @@ public:
 	~ResourceSchemaInspectorProperty();
 };
 
-} // namespace godot::structural_editor
+} // namespace godot::structural_inspector

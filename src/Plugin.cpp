@@ -5,7 +5,7 @@
 #include <Script.hpp>
 
 using namespace godot;
-using namespace godot::structural_editor;
+using namespace godot::structural_inspector;
 
 void InspectorPlugin::_register_methods() {
 	register_method("_notification", &InspectorPlugin::_notification);
@@ -80,8 +80,4 @@ Plugin::Plugin() {
 }
 
 Plugin::~Plugin() {
-}
-
-size_t std::hash<String>::operator()(const String& str) const noexcept {
-	return str.hash();
 }

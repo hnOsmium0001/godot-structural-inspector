@@ -4,7 +4,7 @@
 #include <EditorPlugin.hpp>
 #include <Godot.hpp>
 
-namespace godot::structural_editor {
+namespace godot::structural_inspector {
 
 class InspectorPlugin : public EditorInspectorPlugin {
 	GODOT_CLASS(InspectorPlugin, EditorInspectorPlugin)
@@ -34,9 +34,4 @@ public:
 	~Plugin();
 };
 
-} // namespace godot::structural_editor
-
-template <>
-struct std::hash<godot::String> {
-	size_t operator()(const godot::String& str) const noexcept;
-};
+} // namespace godot::structural_inspector
