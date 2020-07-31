@@ -1,4 +1,5 @@
 #include "Property.hpp"
+#include "GodotGlobal.hpp"
 #include "Schema.hpp"
 
 #include <CheckBox.hpp>
@@ -124,6 +125,7 @@ static Dictionary save_schema(Schema* schema) {
 			Dictionary value;
 			value["name"] = name;
 			value["id"] = id;
+			values.append(value);
 		}
 		property["type"] = "enum";
 		property["values"] = values;
@@ -422,6 +424,49 @@ CommonInspectorProperty::CommonInspectorProperty() {
 CommonInspectorProperty::~CommonInspectorProperty() {
 }
 
+DefinitionReference::DefinitionReference() :
+		data{ nullptr } {}
+
+DefinitionReference::DefinitionReference(std::vector<NamedSchema>* data, size_t idx) :
+		data{ std::pair<std::vector<NamedSchema>*, size_t>{ data, idx } } {}
+
+DefinitionReference::DefinitionReference(std::unique_ptr<Schema>* data) :
+		data{ data } {}
+
+bool DefinitionReference::has_name() {
+	return data.index() == 0;
+}
+
+String DefinitionReference::get_name() {
+	switch (data.index()) {
+		case 0: {
+			auto& data = std::get<0>(this->data);
+			return (*data.first)[data.second].name;
+		}
+		case 1: {
+			return "";
+		}
+	}
+}
+
+String& DefinitionReference::get_name_ref() {
+	auto& data = std::get<0>(this->data);
+	return (*data.first)[data.second].name;
+}
+
+std::unique_ptr<Schema>& DefinitionReference::get_schema() {
+	switch (data.index()) {
+		case 0: {
+			auto& data = std::get<0>(this->data);
+			return (*data.first)[data.second].def;
+		}
+		case 1: {
+			auto& data = std::get<1>(this->data);
+			return *data;
+		}
+	}
+}
+
 static const int LABEL_POS = 0;
 static const int EDIT_POS = 1;
 
@@ -460,21 +505,11 @@ static VBoxContainer* create_enum_value_edit(const String& name, int id, Object*
 	return enum_value;
 }
 
-ResourceSchemaNode* ResourceSchemaNode::_make_child() {
-	auto child = ResourceSchemaNode::_new();
-	child->_custom_init(root, this);
-	auto binding = Array::make(child);
-	child->connect("schema_changed", this, "_child_schema_changed", binding);
-	child->connect("field_name_changed", this, "_child_field_name_changed", binding);
-	child->connect("clicked", this, "_child_clicked", binding);
-	return child;
-}
-
 bool ResourceSchemaNode::_is_mouse_inside() {
 	return get_global_rect().has_point(get_global_mouse_position());
 }
 
-void ResourceSchemaNode::_type_selected_swap(int id, Schema* swap_out) {
+void ResourceSchemaNode::_select_type(int id, Schema* swap_out) {
 	if (schema_id == id) {
 		return;
 	}
@@ -524,10 +559,6 @@ void ResourceSchemaNode::_type_selected_swap(int id, Schema* swap_out) {
 			// Do nothing, for schema_id == UNKNOWN
 		} break;
 	}
-	if (owns_schema) {
-		delete schema;
-		schema = nullptr;
-	}
 
 	switch (id) {
 		case STRUCT: {
@@ -536,9 +567,10 @@ void ResourceSchemaNode::_type_selected_swap(int id, Schema* swap_out) {
 			message->set_visible(true);
 			list->set_visible(true);
 
-			schema = swap_out ? swap_out : new StructSchema();
-			schema_id = STRUCT;
-			emit_signal("schema_changed");
+			if (swap_out != this->definition.get_schema().get()) {
+				definition.get_schema().reset(swap_out ? swap_out : new StructSchema());
+				schema_id = STRUCT;
+			}
 		} break;
 		case ARRAY: {
 			list->set_visible(true);
@@ -548,21 +580,31 @@ void ResourceSchemaNode::_type_selected_swap(int id, Schema* swap_out) {
 			::get_nc_label(max_value)->set_text("Max elements");
 			::get_nc_line(max_value)->set_visible(true);
 
-			auto array = swap_out ? dynamic_cast<ArraySchema*>(swap_out) : new ArraySchema();
-			schema = array;
-			schema_id = ARRAY;
-			// This will immediately emit a `schema_changed` signal (caused by `add_child` -> ready), we need our schema setup before that
-			list->add_child(_make_child());
+			ArraySchema* array;
+			if (swap_out != this->definition.get_schema().get()) {
+				array = swap_out ? dynamic_cast<ArraySchema*>(swap_out) : new ArraySchema();
+				// `array` will be equivlant to `definition->get()` after this
+				definition.get_schema().reset(array);
+				schema_id = ARRAY;
+			} else {
+				array = dynamic_cast<ArraySchema*>(this->definition.get_schema().get());
+			}
+
+			auto child = ResourceSchemaNode::_new();
+			child->_custom_init(root, this, { &array->element_type });
+			child->connect("clicked", this, "_child_clicked", Array::make(child));
+			list->add_child(child);
+
 			min_value->set_value(array->min_elements);
 			max_value->set_value(array->max_elements);
-			emit_signal("schema_changed");
 		} break;
 		case STRING: {
 			::get_nc_line(pattern)->set_visible(true);
 
-			schema = swap_out ? swap_out : new StringSchema();
-			schema_id = STRING;
-			emit_signal("schema_changed");
+			if (swap_out != this->definition.get_schema().get()) {
+				definition.get_schema().reset(swap_out ? swap_out : new StringSchema());
+				schema_id = STRING;
+			}
 		} break;
 		case ENUM: {
 			add->set_visible(true);
@@ -570,9 +612,10 @@ void ResourceSchemaNode::_type_selected_swap(int id, Schema* swap_out) {
 			message->set_visible(true);
 			list->set_visible(true);
 
-			schema = swap_out ? swap_out : new EnumSchema();
-			schema_id = ENUM;
-			emit_signal("schema_changed");
+			if (swap_out != this->definition.get_schema().get()) {
+				definition.get_schema().reset(swap_out ? swap_out : new EnumSchema());
+				schema_id = ENUM;
+			}
 		} break;
 		case INT: {
 			::get_nc_label(min_value)->set_text("Min value");
@@ -580,12 +623,17 @@ void ResourceSchemaNode::_type_selected_swap(int id, Schema* swap_out) {
 			::get_nc_label(max_value)->set_text("Max value");
 			::get_nc_line(max_value)->set_visible(true);
 
-			auto sint = swap_out ? dynamic_cast<IntSchema*>(swap_out) : new IntSchema();
-			schema = sint;
-			schema_id = INT;
+			IntSchema* sint;
+			if (swap_out != this->definition.get_schema().get()) {
+				sint = swap_out ? dynamic_cast<IntSchema*>(swap_out) : new IntSchema();
+				definition.get_schema().reset(sint);
+				schema_id = INT;
+			} else {
+				sint = dynamic_cast<IntSchema*>(this->definition.get_schema().get());
+			}
+
 			min_value->set_value(sint->min_value);
 			max_value->set_value(sint->max_value);
-			emit_signal("schema_changed");
 		} break;
 		case FLOAT: {
 			::get_nc_label(min_value)->set_text("Min value");
@@ -593,20 +641,26 @@ void ResourceSchemaNode::_type_selected_swap(int id, Schema* swap_out) {
 			::get_nc_label(max_value)->set_text("Max value");
 			::get_nc_line(max_value)->set_visible(true);
 
-			auto sfloat = swap_out ? dynamic_cast<FloatSchema*>(swap_out) : new FloatSchema();
-			schema = sfloat;
-			schema_id = FLOAT;
+			FloatSchema* sfloat;
+			if (swap_out != this->definition.get_schema().get()) {
+				auto sfloat = swap_out ? dynamic_cast<FloatSchema*>(swap_out) : new FloatSchema();
+				definition.get_schema().reset(sfloat);
+				schema_id = FLOAT;
+			} else {
+				sfloat = dynamic_cast<FloatSchema*>(this->definition.get_schema().get());
+			}
+
 			min_value->set_value(sfloat->min_value);
 			max_value->set_value(sfloat->max_value);
-			emit_signal("schema_changed");
 		} break;
 		case BOOL: {
-			schema = swap_out ? swap_out : new BoolSchema();
-			schema_id = BOOL;
-			emit_signal("schema_changed");
+			if (swap_out != this->definition.get_schema().get()) {
+				definition.get_schema().reset(swap_out ? swap_out : new BoolSchema());
+				schema_id = BOOL;
+			}
 		} break;
 		default: {
-			schema = nullptr;
+			definition.get_schema() = nullptr;
 			schema_id = UNKNOWN;
 			ERR_PRINT("Unknown type id " + String::num_int64(id));
 		} break;
@@ -635,14 +689,72 @@ void ResourceSchemaNode::_input(Ref<InputEvent> event) {
 void ResourceSchemaNode::_notification(int what) {
 	switch (what) {
 		case NOTIFICATION_READY: {
-			// When this schema node is restored from a .tres file, update_with() will be called before _ready()
-			if (schema_id == UNKNOWN) {
-				_type_selected(STRUCT);
-				type_edit->select(STRUCT);
+			if (definition.has_name()) {
+				::get_nc_line(field_name)->set_visible(true);
+				field_name->set_text(definition.get_name());
 			}
 
-			if (parent && parent->schema_id == STRUCT) {
-				::get_nc_line(field_name)->set_visible(true);
+			if (auto other = dynamic_cast<StructSchema*>(definition.get_schema().get())) {
+				// Update UI nodes to the correct layout only, this will not update `this->schema`
+				_select_type(STRUCT, other);
+				type_edit->select(STRUCT);
+
+				for (int i = 0; i < list->get_child_count(); ++i) {
+					list->get_child(i)->free();
+				}
+				for (int i = 0; i < other->fields.size(); ++i) {
+					auto child = ResourceSchemaNode::_new();
+					child->_custom_init(root, this, { &other->fields, static_cast<size_t>(i) });
+					child->connect("clicked", this, "_child_clicked", Array::make(child));
+					list->add_child(child);
+				}
+			} else if (auto other = dynamic_cast<ArraySchema*>(definition.get_schema().get())) {
+				_select_type(ARRAY, other);
+				type_edit->select(ARRAY);
+
+				min_value->set_value(other->min_elements);
+				max_value->set_value(other->max_elements);
+
+				if (list->get_child_count() > 0) {
+					get_child_node(0)->free();
+				}
+
+				auto child = ResourceSchemaNode::_new();
+				child->_custom_init(root, this, { &other->element_type });
+				child->connect("clicked", this, "_child_clicked", Array::make(child));
+				list->add_child(child);
+			} else if (auto other = dynamic_cast<StringSchema*>(definition.get_schema().get())) {
+				_select_type(STRING, other);
+				type_edit->select(STRING);
+
+				if (other->pattern.is_valid()) {
+					pattern->set_text(other->pattern->get_pattern());
+				}
+			} else if (auto other = dynamic_cast<EnumSchema*>(definition.get_schema().get())) {
+				_select_type(ENUM, other);
+				type_edit->select(ENUM);
+
+				for (int i = 0; i < list->get_child_count(); ++i) {
+					list->get_child(i)->free();
+				}
+				for (auto& [name, id] : other->elements) {
+					list->add_child(::create_enum_value_edit(name, id, this));
+				}
+			} else if (auto other = dynamic_cast<IntSchema*>(definition.get_schema().get())) {
+				_select_type(INT, other);
+				type_edit->select(INT);
+
+				min_value->set_value(other->min_value);
+				max_value->set_value(other->max_value);
+			} else if (auto other = dynamic_cast<FloatSchema*>(definition.get_schema().get())) {
+				_select_type(FLOAT, other);
+				type_edit->select(FLOAT);
+
+				min_value->set_value(other->min_value);
+				max_value->set_value(other->max_value);
+			} else if (auto other = dynamic_cast<BoolSchema*>(definition.get_schema().get())) {
+				_select_type(BOOL, other);
+				type_edit->select(BOOL);
 			}
 		} break;
 
@@ -660,23 +772,26 @@ void ResourceSchemaNode::_notification(int what) {
 }
 
 void ResourceSchemaNode::_type_selected(int id) {
-	_type_selected_swap(id, nullptr);
+	_select_type(id, nullptr);
 }
 
 void ResourceSchemaNode::_add_list_item() {
 	switch (schema_id) {
 		case STRUCT: {
-			auto schema = dynamic_cast<StructSchema*>(this->schema);
-			schema->fields.push_back({ "", nullptr });
+			auto schema = dynamic_cast<StructSchema*>(this->definition.get_schema().get());
+			int idx = schema->fields.size();
+			schema->fields.push_back({ "", std::make_unique<StructSchema>() });
 
-			auto child = _make_child();
+			auto child = ResourceSchemaNode::_new();
+			child->_custom_init(root, this, { &schema->fields, static_cast<size_t>(idx) });
+			child->connect("clicked", this, "_child_clicked", Array::make(child));
 			list->add_child(child);
 
 			root->emit_something_changed();
 		} break;
 		case ENUM: {
 			int idx = list->get_child_count(); // Is equal to `enum_value->get_index()`
-			auto schema = dynamic_cast<EnumSchema*>(this->schema);
+			auto schema = dynamic_cast<EnumSchema*>(this->definition.get_schema().get());
 			// Default ID is its index
 			schema->elements.push_back({ "", idx });
 
@@ -710,24 +825,26 @@ void ResourceSchemaNode::_toggle_remove_mode() {
 }
 
 void ResourceSchemaNode::_field_name_set(const String& field_name) {
-	emit_signal("field_name_changed", field_name);
-	root->emit_something_changed();
+	if (definition.has_name()) {
+		// definition.get_name_ref() = field_name;
+		root->emit_something_changed();
+	}
 }
 
 void ResourceSchemaNode::_min_value_set(real_t value) {
 	switch (schema_id) {
 		case ARRAY: {
-			auto schema = dynamic_cast<ArraySchema*>(this->schema);
+			auto schema = dynamic_cast<ArraySchema*>(this->definition.get_schema().get());
 			schema->min_elements = static_cast<int>(value);
 			root->emit_something_changed();
 		} break;
 		case INT: {
-			auto schema = dynamic_cast<IntSchema*>(this->schema);
+			auto schema = dynamic_cast<IntSchema*>(this->definition.get_schema().get());
 			schema->min_value = static_cast<int>(value);
 			root->emit_something_changed();
 		} break;
 		case FLOAT: {
-			auto schema = dynamic_cast<FloatSchema*>(this->schema);
+			auto schema = dynamic_cast<FloatSchema*>(this->definition.get_schema().get());
 			schema->min_value = value;
 			root->emit_something_changed();
 		} break;
@@ -740,17 +857,17 @@ void ResourceSchemaNode::_min_value_set(real_t value) {
 void ResourceSchemaNode::_max_value_set(real_t value) {
 	switch (schema_id) {
 		case ARRAY: {
-			auto schema = dynamic_cast<ArraySchema*>(this->schema);
+			auto schema = dynamic_cast<ArraySchema*>(this->definition.get_schema().get());
 			schema->max_elements = static_cast<int>(value);
 			root->emit_something_changed();
 		} break;
 		case INT: {
-			auto schema = dynamic_cast<IntSchema*>(this->schema);
+			auto schema = dynamic_cast<IntSchema*>(this->definition.get_schema().get());
 			schema->max_value = static_cast<int>(value);
 			root->emit_something_changed();
 		} break;
 		case FLOAT: {
-			auto schema = dynamic_cast<FloatSchema*>(this->schema);
+			auto schema = dynamic_cast<FloatSchema*>(this->definition.get_schema().get());
 			schema->max_value = value;
 			root->emit_something_changed();
 		} break;
@@ -763,37 +880,9 @@ void ResourceSchemaNode::_max_value_set(real_t value) {
 void ResourceSchemaNode::_pattern_set(const String& pattern) {
 	switch (schema_id) {
 		case STRING: {
-			auto schema = dynamic_cast<StringSchema*>(this->schema);
+			auto schema = dynamic_cast<StringSchema*>(this->definition.get_schema().get());
 			schema->pattern = Ref{ RegEx::_new() };
 			root->emit_something_changed();
-		} break;
-		default: {
-			return;
-		}
-	}
-}
-
-void ResourceSchemaNode::_child_schema_changed(ResourceSchemaNode* child) {
-	switch (schema_id) {
-		case STRUCT: {
-			auto schema = dynamic_cast<StructSchema*>(this->schema);
-			schema->fields[child->get_index()].def = std::unique_ptr<Schema>(child->take_schema());
-		} break;
-		case ARRAY: {
-			auto schema = dynamic_cast<ArraySchema*>(this->schema);
-			schema->element_type = std::unique_ptr<Schema>(child->take_schema());
-		} break;
-		default: {
-			return;
-		}
-	}
-}
-
-void ResourceSchemaNode::_child_field_name_changed(const String& new_name, ResourceSchemaNode* node) {
-	switch (schema_id) {
-		case STRUCT: {
-			auto schema = dynamic_cast<StructSchema*>(this->schema);
-			schema->fields[node->get_index()].name = new_name;
 		} break;
 		default: {
 			return;
@@ -809,13 +898,13 @@ void ResourceSchemaNode::_child_clicked(ResourceSchemaNode* child) {
 	bool removed = false;
 	switch (schema_id) {
 		case STRUCT: {
-			auto schema = dynamic_cast<StructSchema*>(this->schema);
+			auto schema = dynamic_cast<StructSchema*>(this->definition.get_schema().get());
 			child->queue_free();
 			schema->fields.erase(schema->fields.begin() + child->get_index());
 			removed = true;
 		} break;
 		case ENUM: {
-			auto schema = dynamic_cast<EnumSchema*>(this->schema);
+			auto schema = dynamic_cast<EnumSchema*>(this->definition.get_schema().get());
 			child->queue_free();
 			schema->elements.erase(schema->elements.begin() + child->get_index());
 			removed = true;
@@ -836,14 +925,14 @@ void ResourceSchemaNode::_child_clicked(ResourceSchemaNode* child) {
 }
 
 void ResourceSchemaNode::_enum_name_set(const String& name, Control* child) {
-	if (auto schema = dynamic_cast<EnumSchema*>(this->schema)) {
+	if (auto schema = dynamic_cast<EnumSchema*>(this->definition.get_schema().get())) {
 		schema->elements[child->get_index()].name = name;
 		root->emit_something_changed();
 	}
 }
 
 void ResourceSchemaNode::_enum_id_set(int id, Control* child) {
-	if (auto schema = dynamic_cast<EnumSchema*>(this->schema)) {
+	if (auto schema = dynamic_cast<EnumSchema*>(this->definition.get_schema().get())) {
 		schema->elements[child->get_index()].id = id;
 		root->emit_something_changed();
 	}
@@ -859,14 +948,10 @@ void ResourceSchemaNode::_register_methods() {
 	register_method("_min_value_set", &ResourceSchemaNode::_min_value_set);
 	register_method("_max_value_set", &ResourceSchemaNode::_max_value_set);
 	register_method("_pattern_set", &ResourceSchemaNode::_pattern_set);
-	register_method("_child_schema_changed", &ResourceSchemaNode::_child_schema_changed);
-	register_method("_child_field_name_changed", &ResourceSchemaNode::_child_field_name_changed);
 	register_method("_child_clicked", &ResourceSchemaNode::_child_clicked);
 	register_method("_enum_name_set", &ResourceSchemaNode::_enum_name_set);
 	register_method("_enum_id_set", &ResourceSchemaNode::_enum_id_set);
 
-	register_signal<ResourceSchemaNode>("schema_changed", Dictionary{});
-	register_signal<ResourceSchemaNode>("field_name_changed", "name", Variant::STRING);
 	register_signal<ResourceSchemaNode>("clicked", Dictionary{});
 }
 
@@ -945,68 +1030,12 @@ void ResourceSchemaNode::_init() {
 	contents->add_child(padding_box);
 }
 
-void ResourceSchemaNode::_custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaNode* parent) {
+void ResourceSchemaNode::_custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaNode* parent, DefinitionReference definition) {
 	this->root = root;
 	this->parent = parent;
-}
+	this->definition = definition;
 
-void ResourceSchemaNode::update_with(Schema* schema) {
-	if (auto other = dynamic_cast<StructSchema*>(schema)) {
-		// We take ownership of this schema now
-		_type_selected_swap(STRUCT, other);
-		type_edit->select(STRUCT);
-
-		for (int i = 0; i < list->get_child_count(); ++i) {
-			list->get_child(i)->free();
-		}
-		for (auto& field : other->fields) {
-			auto child = _make_child();
-			// update_with() takes the ownership of parameter `schema`. But it will also fire signal `schema_changed`, causing us to take the ownership from it
-			// Use release() instead of get() to prevent us freeing the pointer while taking the ownership back
-			child->update_with(field.def.release());
-			child->set_field_name(field.name);
-			list->add_child(child);
-		}
-	} else if (auto other = dynamic_cast<ArraySchema*>(schema)) {
-		_type_selected_swap(ARRAY, other);
-		type_edit->select(ARRAY);
-
-		min_value->set_value(other->min_elements);
-		max_value->set_value(other->max_elements);
-		get_child_node(0)->update_with(other->element_type.release());
-	} else if (auto other = dynamic_cast<StringSchema*>(schema)) {
-		_type_selected_swap(STRING, other);
-		type_edit->select(STRING);
-
-		if (other->pattern.is_valid()) {
-			pattern->set_text(other->pattern->get_pattern());
-		}
-	} else if (auto other = dynamic_cast<EnumSchema*>(schema)) {
-		_type_selected_swap(ENUM, other);
-		type_edit->select(ENUM);
-
-		for (int i = 0; i < list->get_child_count(); ++i) {
-			list->get_child(i)->free();
-		}
-		for (auto& [name, id] : other->elements) {
-			list->add_child(::create_enum_value_edit(name, id, this));
-		}
-	} else if (auto other = dynamic_cast<IntSchema*>(schema)) {
-		_type_selected_swap(INT, other);
-		type_edit->select(INT);
-
-		min_value->set_value(other->min_value);
-		max_value->set_value(other->max_value);
-	} else if (auto other = dynamic_cast<FloatSchema*>(schema)) {
-		_type_selected_swap(FLOAT, other);
-		type_edit->select(FLOAT);
-
-		min_value->set_value(other->min_value);
-		max_value->set_value(other->max_value);
-	} else if (auto other = dynamic_cast<BoolSchema*>(schema)) {
-		_type_selected_swap(BOOL, other);
-		type_edit->select(BOOL);
-	}
+	// Updating the UI according to the incoming schema is done in _notification::READY when the child nodes are initialized
 }
 
 String ResourceSchemaNode::get_field_name() const {
@@ -1023,21 +1052,13 @@ ResourceSchemaNode* ResourceSchemaNode::get_child_node(int i) {
 }
 
 Schema* ResourceSchemaNode::get_schema() {
-	return schema;
-}
-
-Schema* ResourceSchemaNode::take_schema() {
-	owns_schema = false;
-	return schema;
+	return definition.get_schema().get();
 }
 
 ResourceSchemaNode::ResourceSchemaNode() {
 }
 
 ResourceSchemaNode::~ResourceSchemaNode() {
-	if (owns_schema) {
-		delete schema;
-	}
 }
 
 void ResourceSchemaInspectorProperty::_toggle_editor_visibility() {
@@ -1087,15 +1108,19 @@ void ResourceSchemaInspectorProperty::_init() {
 	properties->add_child(toolbar);
 }
 
-ResourceSchemaNode* ResourceSchemaInspectorProperty::add_root_property() {
+ResourceSchemaNode* ResourceSchemaInspectorProperty::add_root_property_with(const String& name, std::unique_ptr<Schema> schema) {
+	schemas.push_back({ name, std::move(schema) });
+
 	auto prop = ResourceSchemaNode::_new();
-	prop->_custom_init(this, nullptr);
-	// Force enable field name
-	prop->set_field_name("");
+	prop->_custom_init(this, nullptr, { &schemas, schemas.size() - 1 });
 	prop->connect("clicked", this, "_prop_clicked", Array::make(prop));
 	properties->add_child(prop);
 	emit_something_changed();
 	return prop;
+}
+
+ResourceSchemaNode* ResourceSchemaInspectorProperty::add_root_property() {
+	return add_root_property_with("", std::make_unique<StructSchema>());
 }
 
 void ResourceSchemaInspectorProperty::remove_root_property() {
@@ -1135,12 +1160,7 @@ void ResourceSchemaInspectorProperty::update_property() {
 		Dictionary dict = data[i];
 		// If parsing schema failed, we skip this entry
 		if (auto schema = ::parse_schema(dict)) {
-			auto prop = ResourceSchemaNode::_new();
-			prop->_custom_init(this, nullptr);
-			prop->update_with(schema.release());
-			prop->set_field_name(dict["name"]);
-			prop->connect("clicked", this, "_prop_clicked", Array::make(prop));
-			properties->add_child(prop);
+			add_root_property_with(dict["name"], std::move(schema));
 		} else {
 			ERR_PRINT("Error while parsing schema entry: " + JSON::get_singleton()->print(dict));
 		}

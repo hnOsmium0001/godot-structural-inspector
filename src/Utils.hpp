@@ -5,8 +5,23 @@
 #include <String.hpp>
 #include <functional>
 #include <iterator>
+#include <memory>
 
 namespace godot::structural_inspector {
+
+template <class... Ts>
+struct Overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> Overloaded(Ts...) -> Overloaded<Ts...>;
+
+template <class This>
+class CloneProvider {
+public:
+	virtual This* clone() const = 0;
+
+	std::unique_ptr<This> clone_uptr() const {
+		return std::unique_ptr<This>(clone());
+	}
+};
 
 template <class T>
 class Iterator {

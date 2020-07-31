@@ -6,18 +6,29 @@
 script = ExtResource( 1 )
 properties = [ {
 "element_type": {
-"type": "struct",
 "fields": [ {
-"type": "int",
 "name": "idx",
-"min_value": 0,
-"max_value": 500
+"type": "enum",
+"values": [  ]
 }, {
-"type": "string",
 "name": "name",
-"pattern": ""
+"pattern": "",
+"type": "string"
+}, {
+"name": "",
+"type": "enum",
+"values": [ {
+"id": 0,
+"name": ""
+}, {
+"id": 0,
+"name": ""
 } ]
+} ],
+"type": "struct"
 },
+"max_elements": 2147483647,
+"min_elements": -2147483648,
 "name": "my_array",
 "type": "array"
 } ]

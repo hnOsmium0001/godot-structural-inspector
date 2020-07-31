@@ -13,10 +13,6 @@
 using namespace godot;
 using namespace godot::structural_inspector;
 
-std::unique_ptr<Schema> Schema::clone_uptr() const {
-	return std::unique_ptr<Schema>(clone());
-}
-
 Variant StructSchema::create_value() const {
 	return Dictionary{};
 }

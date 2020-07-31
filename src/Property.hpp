@@ -17,6 +17,9 @@
 #include <VBoxContainer.hpp>
 #include <memory>
 #include <unordered_map>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace godot::structural_inspector {
 
@@ -129,6 +132,25 @@ public:
 	~CommonInspectorProperty();
 };
 
+class DefinitionReference {
+public:
+	std::variant<
+			std::pair<std::vector<NamedSchema>*, size_t>,
+			std::unique_ptr<Schema>*>
+			data;
+
+	DefinitionReference();
+	DefinitionReference(std::vector<NamedSchema>* data, size_t idx);
+	DefinitionReference(std::unique_ptr<Schema>* data);
+
+	bool has_name();
+	/// Safe to call regardless of the state, returns emtpy string if the definition does not have a name
+	String get_name();
+	/// Only safe to call when has_name() returns true
+	String& get_name_ref();
+	std::unique_ptr<Schema>& get_schema();
+};
+
 class ResourceSchemaInspectorProperty;
 
 class ResourceSchemaNode : public MarginContainer {
@@ -171,16 +193,14 @@ private:
 	// Used for STRUCT, ARRAY, ENUM
 	VBoxContainer* list;
 
-	Schema* schema = nullptr;
-	bool owns_schema = true;
+	DefinitionReference definition;
 	NodeType schema_id = UNKNOWN;
 
 	bool removing_child = false;
 	bool mouse_inside = false;
 
-	ResourceSchemaNode* _make_child();
 	bool _is_mouse_inside();
-	void _type_selected_swap(int id, Schema* swap_out);
+	void _select_type(int id, Schema* swap_out);
 
 	void _input(Ref<InputEvent> event);
 	void _notification(int what);
@@ -191,8 +211,6 @@ private:
 	void _min_value_set(real_t value);
 	void _max_value_set(real_t value);
 	void _pattern_set(const String& pattern);
-	void _child_schema_changed(ResourceSchemaNode* child);
-	void _child_field_name_changed(const String& new_name, ResourceSchemaNode* node);
 	void _child_clicked(ResourceSchemaNode* child);
 
 	void _enum_name_set(const String& name, Control* child);
@@ -201,15 +219,13 @@ private:
 public:
 	static void _register_methods();
 	void _init();
-	void _custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaNode* parent);
-	void update_with(Schema* schema);
+	void _custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaNode* parent, DefinitionReference definition);
 
 	String get_field_name() const;
 	void set_field_name(const String& name);
 
 	ResourceSchemaNode* get_child_node(int i);
 	Schema* get_schema();
-	Schema* take_schema();
 
 	ResourceSchemaNode();
 	~ResourceSchemaNode();
@@ -218,6 +234,7 @@ public:
 class ResourceSchemaInspectorProperty : public EditorProperty {
 	GODOT_CLASS(ResourceSchemaInspectorProperty, EditorProperty)
 private:
+	std::vector<NamedSchema> schemas;
 	Button* btn;
 	VBoxContainer* properties;
 	int selected_idx = -1;
@@ -230,6 +247,7 @@ public:
 	static void _register_methods();
 	void _init();
 
+	ResourceSchemaNode* add_root_property_with(const String& name, std::unique_ptr<Schema> schema);
 	ResourceSchemaNode* add_root_property();
 	void remove_root_property();
 	void emit_something_changed();
