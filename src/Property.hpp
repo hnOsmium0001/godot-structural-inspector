@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Dictionary.hpp"
 #include "Schema.hpp"
 #include "Utils.hpp"
 
@@ -25,19 +26,15 @@ namespace godot::structural_inspector {
 
 class ResourceSchema : public Resource {
 	GODOT_CLASS(ResourceSchema, Resource)
-private:
+public:
 	Array properties;
-	// std::unique_ptr is incompatible with it. Schemas needs to be manually freed.
-	mutable std::unordered_map<String, Schema*> info_cache;
-	mutable bool initialized = false;
 
 public:
 	static void _register_methods();
 	void _init();
 
-	const std::unordered_map<String, Schema*>& get_info() const;
-	std::unordered_map<String, Schema*> get_info_copy() const;
-	void set_info(Iterator<std::pair<String, Schema*>>& data);
+	std::unordered_map<String, Schema*> compute_info() const;
+	std::unique_ptr<Schema> compute_info_for(const String& prop_name) const;
 
 	ResourceSchema();
 	~ResourceSchema();
@@ -109,7 +106,7 @@ public:
 class CommonInspectorProperty : public EditorProperty {
 	GODOT_CLASS(CommonInspectorProperty, EditorProperty)
 private:
-	const Schema* schema;
+	std::unique_ptr<Schema> schema;
 	Button* btn;
 	Control* editor;
 	bool updating = false;
@@ -119,7 +116,7 @@ private:
 public:
 	static void _register_methods();
 	void _init();
-	void _custom_init(const Schema* schema, Control* editor);
+	void _custom_init(std::unique_ptr<Schema> schema);
 
 	Variant find_object(const Array& path, int distance);
 	void update_value(Variant value, const Array& path);
@@ -207,7 +204,7 @@ private:
 	void _type_selected(int id);
 	void _add_list_item();
 	void _toggle_remove_mode();
-	void _field_name_set(const String& field_name);
+	void _field_name_set(const String& name);
 	void _min_value_set(real_t value);
 	void _max_value_set(real_t value);
 	void _pattern_set(const String& pattern);

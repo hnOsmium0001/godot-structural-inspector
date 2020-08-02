@@ -37,14 +37,6 @@ void StructSchema::update_edit(Control* edit, const Variant& data) const {
 	}
 }
 
-EditorProperty* StructSchema::create_property() const {
-	auto prop = CommonInspectorProperty::_new();
-	auto editor = StructEditor::_new();
-	editor->_custom_init(this, prop, Array::make());
-	prop->_custom_init(this, editor);
-	return prop;
-}
-
 StructSchema* StructSchema::clone() const {
 	auto that = new StructSchema();
 	for (auto& [name, field] : fields) {
@@ -73,14 +65,6 @@ void ArraySchema::update_edit(Control* edit, const Variant& data) const {
 		auto field = static_cast<Control*>(editor->elements->get_child(i));
 		element_type->update_edit(field, data_source[i]);
 	}
-}
-
-EditorProperty* ArraySchema::create_property() const {
-	auto prop = CommonInspectorProperty::_new();
-	auto editor = ArrayEditor::_new();
-	editor->_custom_init(this, prop, Array::make());
-	prop->_custom_init(this, editor);
-	return prop;
 }
 
 ArraySchema* ArraySchema::clone() const {
@@ -126,10 +110,6 @@ void StringSchema::update_edit(Control* edit, const Variant& data) const {
 		line_edit->set_text(text);
 		return;
 	}
-}
-
-EditorProperty* StringSchema::create_property() const {
-	return CommonInspectorProperty::_new();
 }
 
 StringSchema* StringSchema::clone() const {
@@ -180,10 +160,6 @@ void EnumSchema::update_edit(Control* edit, const Variant& data) const {
 	}
 }
 
-EditorProperty* EnumSchema::create_property() const {
-	return CommonInspectorProperty::_new();
-}
-
 EnumSchema* EnumSchema::clone() const {
 	auto that = new EnumSchema();
 	for (auto& element : elements) {
@@ -227,10 +203,6 @@ void IntSchema::update_edit(Control* edit, const Variant& data) const {
 		spin_box->set_value(value);
 		return;
 	}
-}
-
-EditorProperty* IntSchema::create_property() const {
-	return CommonInspectorProperty::_new();
 }
 
 IntSchema* IntSchema::clone() const {
@@ -277,10 +249,6 @@ void FloatSchema::update_edit(Control* edit, const Variant& data) const {
 	}
 }
 
-EditorProperty* FloatSchema::create_property() const {
-	return CommonInspectorProperty::_new();
-}
-
 FloatSchema* FloatSchema::clone() const {
 	auto that = new FloatSchema();
 	that->min_value = min_value;
@@ -320,10 +288,6 @@ void BoolSchema::update_edit(Control* edit, const Variant& data) const {
 		checkbox->set_pressed(value);
 		return;
 	}
-}
-
-EditorProperty* BoolSchema::create_property() const {
-	return CommonInspectorProperty::_new();
 }
 
 BoolSchema* BoolSchema::clone() const {

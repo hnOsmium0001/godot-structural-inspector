@@ -1,8 +1,11 @@
 #pragma once
 
+#include "Schema.hpp"
+
 #include <EditorInspectorPlugin.hpp>
 #include <EditorPlugin.hpp>
 #include <Godot.hpp>
+#include <unordered_map>
 
 namespace godot::structural_inspector {
 
@@ -15,6 +18,8 @@ public:
 
 	bool can_handle(const Object* object);
 	bool parse_property(const Object* object, const int64_t type, const String path, const int64_t hint, const String hint_text, const int64_t usage);
+
+	void invalidate_schema(const String& schema_path);
 
 	InspectorPlugin();
 	~InspectorPlugin();

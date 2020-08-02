@@ -1,8 +1,12 @@
 #include "Plugin.hpp"
+#include "GodotGlobal.hpp"
+#include "Object.hpp"
 #include "Property.hpp"
 
 #include <ResourceLoader.hpp>
 #include <Script.hpp>
+
+#include <JSON.hpp>
 
 using namespace godot;
 using namespace godot::structural_inspector;
@@ -20,9 +24,27 @@ void InspectorPlugin::_notification(int what) {
 }
 
 bool InspectorPlugin::can_handle(const Object* object) {
+	if (Object::cast_to<ResourceSchema>(object) != nullptr) {
+		return true;
+	}
+
 	auto script = Ref{ static_cast<Script*>(object->get_script()) };
-	return (script.is_valid() && script->get_script_constant_map().has("resource_schema_path")) ||
-		   Object::cast_to<ResourceSchema>(object) != nullptr;
+	if (script.is_valid()) {
+		auto script_path = script->get_path();
+		auto schema_path = script_path.substr(0, script_path.find_last(".")) + ".schema.tres";
+		if (auto resource = ResourceLoader::get_singleton()->load(schema_path); resource.is_valid()) {
+			return Object::cast_to<ResourceSchema>(resource.ptr()) != nullptr;
+		}
+
+		// TODO allow custom schema path
+		// if (script->get_script_constant_map().has("resource_schema_path")) {
+		// 	String path = script->get_script_constant_map()["resource_schema_path"];
+		// 	Ref<ResourceSchema> schema = ResourceLoader::get_singleton()->load(path);
+		// 	return schema.is_valid();
+		// }
+	}
+
+	return false;
 }
 
 bool InspectorPlugin::parse_property(const Object* object, const int64_t type, const String path, const int64_t hint, const String hint_text, const int64_t usage) {
@@ -35,16 +57,21 @@ bool InspectorPlugin::parse_property(const Object* object, const int64_t type, c
 		}
 	}
 
-	auto script = Ref{ static_cast<Script*>(object->get_script()) };
 	// Since the object passed the test in `can_handle`, and it's not a ResourceSchema, it must have a valid script attached
-	String schema_path = script->get_script_constant_map()["resource_schema_path"];
-	Ref<ResourceSchema> schema = ResourceLoader::get_singleton()->load(schema_path);
-	if (schema.is_valid()) {
-		auto info = schema->get_info();
-		auto iter = info.find(path);
-		if (iter != info.end()) {
-			add_property_editor(path, iter->second->create_property());
-			return true;
+	auto script = Ref{ static_cast<Script*>(object->get_script()) };
+	auto script_path = script->get_path();
+	auto schema_path = script_path.substr(0, script_path.find_last(".")) + ".schema.tres";
+	Ref<ResourceSchema> ref = ResourceLoader::get_singleton()->load(schema_path);
+	if (ref.is_valid()) {
+		if (auto res = Object::cast_to<ResourceSchema>(ref.ptr())) {
+			// Godot::print(String::num_int64(res->properties.size()));
+			if (auto schema = res->compute_info_for(path)) {
+				auto prop = CommonInspectorProperty::_new();
+				prop->_custom_init(std::move(schema));
+
+				add_property_editor(path, prop);
+				return true;
+			}
 		}
 	}
 

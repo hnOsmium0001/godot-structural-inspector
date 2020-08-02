@@ -22,7 +22,6 @@ public:
 	virtual Variant create_value() const = 0;
 	virtual Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const = 0;
 	virtual void update_edit(Control* edit, const Variant& data) const = 0;
-	virtual EditorProperty* create_property() const = 0;
 	virtual ~Schema() = default;
 };
 
@@ -38,10 +37,7 @@ public:
 	Variant create_value() const override;
 	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
 	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
 	StructSchema* clone() const override;
-
-	static StructSchema defaulted();
 };
 
 class ArraySchema : public Schema, public CloneProvider<ArraySchema> {
@@ -53,10 +49,7 @@ public:
 	Variant create_value() const override;
 	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
 	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
 	ArraySchema* clone() const override;
-
-	static ArraySchema defaulted();
 };
 
 class StringSchema : public Schema, public CloneProvider<StringSchema> {
@@ -66,10 +59,7 @@ public:
 	Variant create_value() const override;
 	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
 	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
 	StringSchema* clone() const override;
-
-	static StructSchema defaulted();
 };
 
 class EnumSchema : public Schema, public CloneProvider<EnumSchema> {
@@ -83,10 +73,7 @@ public:
 	Variant create_value() const override;
 	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
 	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
 	EnumSchema* clone() const override;
-
-	static EnumSchema defaulted();
 };
 
 class IntSchema : public Schema, public CloneProvider<IntSchema> {
@@ -97,10 +84,7 @@ public:
 	Variant create_value() const override;
 	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
 	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
 	IntSchema* clone() const override;
-
-	static IntSchema defaulted();
 };
 
 class FloatSchema : public Schema, public CloneProvider<FloatSchema> {
@@ -112,10 +96,7 @@ public:
 	Variant create_value() const override;
 	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
 	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
 	FloatSchema* clone() const override;
-
-	static FloatSchema defaulted();
 };
 
 class BoolSchema : public Schema, public CloneProvider<BoolSchema> {
@@ -123,10 +104,7 @@ public:
 	Variant create_value() const override;
 	Control* create_edit(const String* name, CommonInspectorProperty* target, const Array& path) const override;
 	void update_edit(Control* edit, const Variant& data) const override;
-	EditorProperty* create_property() const override;
 	BoolSchema* clone() const override;
-
-	static BoolSchema defaulted();
 };
 
 } // namespace godot::structural_inspector

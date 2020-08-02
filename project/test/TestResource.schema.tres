@@ -15,20 +15,33 @@ properties = [ {
 "pattern": "",
 "type": "string"
 }, {
-"name": "",
+"name": "type",
 "type": "enum",
 "values": [ {
 "id": 0,
-"name": ""
+"name": "ACTIVE"
 }, {
-"id": 0,
-"name": ""
+"id": 1,
+"name": "INACTIVE"
+}, {
+"id": 2,
+"name": "BLOCKED"
 } ]
+}, {
+"element_type": {
+"max_value": -2147483648,
+"min_value": 0,
+"type": "int"
+},
+"max_elements": 2147483647,
+"min_elements": -2147483648,
+"name": "linked_ids",
+"type": "array"
 } ],
 "type": "struct"
 },
 "max_elements": 2147483647,
 "min_elements": -2147483648,
-"name": "my_array",
+"name": "contents",
 "type": "array"
 } ]
