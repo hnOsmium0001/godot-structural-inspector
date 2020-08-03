@@ -1,15 +1,11 @@
-#include "Property.hpp"
-#include "Schema.hpp"
-#include "String.hpp"
+#include "SchemaEditor.hpp"
 
-#include <CheckBox.hpp>
 #include <GlobalConstants.hpp>
 #include <InputEvent.hpp>
 #include <InputEventMouseButton.hpp>
 #include <InputEventMouseMotion.hpp>
 #include <JSON.hpp>
 #include <MenuButton.hpp>
-#include <GodotGlobal.hpp>
 #include <PopupMenu.hpp>
 #include <SpinBox.hpp>
 #include <algorithm>
@@ -18,411 +14,11 @@
 using namespace godot;
 using namespace godot::structural_inspector;
 
-void ResourceSchema::_register_methods() {
-	register_property("properties", &ResourceSchema::properties, Array{});
-	// register_property<ResourceSchema, Array>("properties", &ResourceSchema::set_properties, &ResourceSchema::get_properties, Array{});
-}
-
-void ResourceSchema::_init() {
-}
-
-static std::unique_ptr<Schema> parse_schema(const Dictionary& def) {
-	String type = def["type"];
-	if (type == "struct") {
-		auto schema = std::make_unique<StructSchema>();
-		Array fields = def["fields"];
-		for (int i = 0; i < fields.size(); ++i) {
-			Dictionary property_def = fields[i];
-			schema->fields.push_back({ property_def["name"], parse_schema(property_def) });
-		}
-		return schema;
-	} else if (type == "array") {
-		auto schema = std::make_unique<ArraySchema>();
-		schema->element_type = parse_schema(def["element_type"]);
-		return schema;
-	} else if (type == "string") {
-		auto schema = std::make_unique<StringSchema>();
-		if (def.has("pattern")) {
-			String pattern = def["pattern"];
-			auto regex = RegEx::_new();
-			if (regex->compile(pattern) != Error::OK) {
-				return nullptr;
-			}
-			schema->pattern = Ref{ regex };
-		}
-		return schema;
-	} else if (type == "enum") {
-		auto schema = std::make_unique<EnumSchema>();
-		Array values = def["values"];
-		for (int i = 0; i < values.size(); ++i) {
-			Dictionary value = values[i];
-			schema->elements.push_back({ value["name"], value["id"] });
-		}
-		return schema;
-	} else if (type == "int") {
-		auto schema = std::make_unique<IntSchema>();
-		schema->min_value = def["min_value"];
-		schema->max_value = def["max_value"];
-		return schema;
-	} else if (type == "float") {
-		auto schema = std::make_unique<FloatSchema>();
-		schema->min_value = def["min_value"];
-		schema->max_value = def["max_value"];
-		return schema;
-	} else if (type == "bool") {
-		return std::make_unique<BoolSchema>();
-	} else {
-		return nullptr;
-	}
-}
-
-static Dictionary save_schema(Schema* schema) {
-	Dictionary property;
-	if (auto stru = dynamic_cast<StructSchema*>(schema)) {
-		Array fields;
-		for (auto& [name, field] : stru->fields) {
-			auto field_dict = save_schema(field.get());
-			field_dict["name"] = name;
-			fields.append(field_dict);
-		}
-		property["type"] = "struct";
-		property["fields"] = fields;
-	} else if (auto array = dynamic_cast<ArraySchema*>(schema)) {
-		property["type"] = "array";
-		property["element_type"] = save_schema(array->element_type.get());
-		property["min_elements"] = array->min_elements;
-		property["max_elements"] = array->max_elements;
-	} else if (auto string = dynamic_cast<StringSchema*>(schema)) {
-		property["type"] = "string";
-		if (string->pattern.is_valid()) {
-			property["pattern"] = string->pattern->get_pattern();
-		}
-	} else if (auto en = dynamic_cast<EnumSchema*>(schema)) {
-		Array values;
-		for (auto& [name, id] : en->elements) {
-			Dictionary value;
-			value["name"] = name;
-			value["id"] = id;
-			values.append(value);
-		}
-		property["type"] = "enum";
-		property["values"] = values;
-	} else if (auto sint = dynamic_cast<IntSchema*>(schema)) {
-		property["type"] = "int";
-		property["min_value"] = sint->min_value;
-		property["max_value"] = sint->max_value;
-	} else if (auto sfloat = dynamic_cast<FloatSchema*>(schema)) {
-		property["type"] = "int";
-		property["min_value"] = sfloat->min_value;
-		property["max_value"] = sfloat->max_value;
-	} else if (auto sbool = dynamic_cast<BoolSchema*>(schema)) {
-		property["type"] = "bool";
-	}
-	return property;
-}
-
-std::unordered_map<String, Schema*> ResourceSchema::compute_info() const {
-	std::unordered_map<String, Schema*> info;
-	for (int i = 0; i < properties.size(); ++i) {
-		Dictionary dict = properties[i];
-		// If parsing schema failed, we skip this entry
-		if (auto schema = ::parse_schema(dict)) {
-			info.insert({ dict["name"], schema.release() });
-		} else {
-			ERR_PRINT("Error while parsing schema entry: " + JSON::get_singleton()->print(dict));
-		}
-	}
-	return info;
-}
-
-std::unique_ptr<Schema> ResourceSchema::compute_info_for(const String& prop_name) const {
-	for (int i = 0; i < properties.size(); ++i) {
-		Dictionary dict = properties[i];
-		if (dict.has("name") && dict["name"].get_type() == Variant::STRING) {
-			String name = dict["name"];
-			if (name == prop_name) {
-				return ::parse_schema(dict);
-			}
-		}
-	}
-	return nullptr;
-}
-
-ResourceSchema::ResourceSchema() {
-}
-
-ResourceSchema::~ResourceSchema() {
-}
-
-void StructEditor::_register_methods() {
-	register_method("has_proerpty_name", &StructEditor::has_property_name);
-	register_method("get_property_name", &StructEditor::get_property_name);
-	register_method("set_property_name", &StructEditor::set_property_name);
-}
-
-void StructEditor::_init() {
-	toolbar = HBoxContainer::_new();
-	add_child(toolbar);
-
-	title = Label::_new();
-	toolbar->add_child(title);
-
-	fields = VBoxContainer::_new();
-	add_child(fields);
-}
-
-void StructEditor::_custom_init(const StructSchema* schema, CommonInspectorProperty* notif_target, const Array& path) {
-	this->schema = schema;
-	this->notif_target = notif_target;
-	this->path = path;
-
-	for (auto& [name, schema] : schema->fields) {
-		auto path = this->path.duplicate();
-		path.append(name);
-		fields->add_child(schema->create_edit(&name, notif_target, path));
-	}
-}
-
-bool StructEditor::has_property_name() const {
-	return title->is_visible();
-}
-
-String StructEditor::get_property_name() const {
-	return title->get_text();
-}
-
-void StructEditor::set_property_name(const String& name) {
-	title->set_visible(true);
-	title->set_text(name);
-}
-
-StructEditor::StructEditor() {
-}
-
-StructEditor::~StructEditor() {
-}
-
-void ArrayEditor::_element_gui_input(Ref<InputEvent> event, Control* element) {
-	if (auto mb = Object::cast_to<InputEventMouseButton>(event.ptr())) {
-		if (element->get_global_rect().has_point(get_global_mouse_position())) {
-			selected_idx = element->get_index();
-			remove->set_disabled(false);
-			return;
-		}
-	}
-}
-
-void ArrayEditor::_add_element() {
-	auto path = this->path.duplicate();
-	path.append(elements->get_child_count());
-	auto element = schema->create_edit(nullptr, notif_target, path);
-	notif_target->add_array_element(-1, schema->create_value(), path);
-	elements->add_child(element);
-	if (selected_idx != -1) {
-		elements->move_child(element, selected_idx);
-	}
-
-	Array binds{};
-	binds.append(element);
-	element->connect("gui_input", this, "_element_gui_input", binds);
-
-	if (elements->get_child_count() == schema->max_elements) {
-		add->set_disabled(true);
-	}
-}
-
-void ArrayEditor::_remove_element() {
-	if (selected_idx != -1) {
-		elements->get_child(selected_idx)->queue_free();
-		notif_target->remove_array_element(selected_idx, path);
-		selected_idx = -1;
-		remove->set_disabled(true);
-
-		if (elements->get_child_count() < schema->max_elements) {
-			add->set_disabled(false);
-		}
-	}
-}
-
-void ArrayEditor::_register_methods() {
-	register_method("_element_gui_input", &ArrayEditor::_element_gui_input);
-	register_method("_add_element", &ArrayEditor::_add_element);
-	register_method("_remove_element", &ArrayEditor::_remove_element);
-	register_method("has_proerpty_name", &ArrayEditor::has_property_name);
-	register_method("get_property_name", &ArrayEditor::get_property_name);
-	register_method("set_property_name", &ArrayEditor::set_property_name);
-}
-
-void ArrayEditor::_init() {
-	toolbar = HBoxContainer::_new();
-	add_child(toolbar);
-
-	title = Label::_new();
-	toolbar->add_child(title);
-	add = NXButton::_new();
-	add->_custom_init("Add");
-	add->connect("pressed", this, "_add_element");
-	toolbar->add_child(add);
-	remove = NXButton::_new();
-	remove->_custom_init("Remove");
-	remove->connect("pressed", this, "_remove_element");
-	toolbar->add_child(remove);
-
-	elements = VBoxContainer::_new();
-	add_child(elements);
-}
-
-void ArrayEditor::_custom_init(const ArraySchema* schema, CommonInspectorProperty* notif_target, const Array& path) {
-	this->schema = schema;
-	this->notif_target = notif_target;
-	this->path = path;
-
-	for (int i = 0; i < schema->min_elements; ++i) {
-		auto path = this->path.duplicate();
-		path.append(i);
-		elements->add_child(schema->create_edit(nullptr, notif_target, path));
-	}
-}
-
-bool ArrayEditor::has_property_name() const {
-	return title->is_visible();
-}
-
-String ArrayEditor::get_property_name() const {
-	return title->get_text();
-}
-
-void ArrayEditor::set_property_name(const String& name) {
-	title->set_visible(true);
-	title->set_text(name);
-}
-
-ArrayEditor::ArrayEditor() {
-}
-
-ArrayEditor::~ArrayEditor() {
-}
-
-Variant CommonInspectorProperty::find_object(const Array& path, int distance) {
-	// Either `Array` or `Dictionary`
-	auto current_object = get_edited_object()->get(get_edited_property());
-	for (int i = 0; i < path.size() - distance; ++i) {
-		auto& prop_name = path[i];
-		switch (prop_name.get_type()) {
-			case Variant::STRING: {
-				String name = prop_name;
-				Dictionary dict = current_object;
-				current_object = dict[name];
-			} break;
-			case Variant::INT: {
-				int idx = prop_name;
-				Array array = current_object;
-				current_object = array[idx];
-			} break;
-			default: {
-				// Invalid `prop_name` type
-				return Variant{ static_cast<Object*>(nullptr) };
-			}
-		}
-	}
-	return current_object;
-}
-
-void CommonInspectorProperty::_toggle_editor_visibility() {
-	if (editor->is_visible()) {
-		remove_child(editor);
-		set_bottom_editor(nullptr);
-		editor->set_visible(false);
-	} else {
-		add_child(editor);
-		set_bottom_editor(editor);
-		editor->set_visible(true);
-	}
-}
-
-void CommonInspectorProperty::_register_methods() {
-	register_method("_toggle_editor_visibility", &CommonInspectorProperty::_toggle_editor_visibility);
-	register_method("update_property", &CommonInspectorProperty::update_property);
-}
-
-void CommonInspectorProperty::_init() {
-	btn = Button::_new();
-	btn->connect("pressed", this, "_toggle_editor_visibility");
-	add_child(btn);
-}
-
-void CommonInspectorProperty::_custom_init(std::unique_ptr<Schema> schema_in) {
-	this->schema = std::move(schema_in);
-	auto schema = this->schema.get();
-
-	editor = schema->create_edit(nullptr, this, Array{});
-	editor->set_visible(false);
-}
-
-void CommonInspectorProperty::update_value(Variant value, const Array& path) {
-	if (updating) return;
-
-	auto object = find_object(path, 1);
-	auto last_prop_name = path[path.size() - 1];
-	switch (last_prop_name.get_type()) {
-		case Variant::STRING: {
-			String name = last_prop_name;
-			Dictionary dict = object;
-			dict[name] = value;
-		} break;
-		case Variant::INT: {
-			int idx = last_prop_name;
-			Array array = object;
-			array[idx] = value;
-		} break;
-		default: {
-			// Invalid `prop_name` type
-			return;
-		} break;
-	}
-
-	emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
-}
-
-void CommonInspectorProperty::add_array_element(int pos, Variant elm, const Array& path) {
-	if (updating) return;
-
-	Array array = find_object(path, 0);
-	if (pos == -1) {
-		array.insert(pos, elm);
-	} else {
-		array.append(elm);
-	}
-
-	emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
-}
-
-void CommonInspectorProperty::remove_array_element(int pos, const Array& path) {
-	if (updating) return;
-
-	Array array = find_object(path, 0);
-	array.remove(pos);
-
-	emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
-}
-
-void CommonInspectorProperty::update_property() {
-	updating = true;
-	schema->update_edit(editor, get_edited_object()->get(get_edited_property()));
-	updating = false;
-}
-
-CommonInspectorProperty::CommonInspectorProperty() {
-}
-
-CommonInspectorProperty::~CommonInspectorProperty() {
-}
-
 DefinitionReference::DefinitionReference() :
 		data{ nullptr } {}
 
-DefinitionReference::DefinitionReference(std::vector<NamedSchema>* data, size_t idx) :
-		data{ std::pair<std::vector<NamedSchema>*, size_t>{ data, idx } } {}
+DefinitionReference::DefinitionReference(std::vector<StructSchema::Field>* data, size_t idx) :
+		data{ std::pair<std::vector<StructSchema::Field>*, size_t>{ data, idx } } {}
 
 DefinitionReference::DefinitionReference(std::unique_ptr<Schema>* data) :
 		data{ data } {}
@@ -499,11 +95,11 @@ static VBoxContainer* create_enum_value_edit(const String& name, int id, Object*
 	return enum_value;
 }
 
-bool ResourceSchemaNode::_is_mouse_inside() {
+bool ResourceSchemaEditor::_is_mouse_inside() {
 	return get_global_rect().has_point(get_global_mouse_position());
 }
 
-void ResourceSchemaNode::_select_type(int id, Schema* swap_out) {
+void ResourceSchemaEditor::_select_type(int id, Schema* swap_out) {
 	if (schema_id == id) {
 		return;
 	}
@@ -589,7 +185,7 @@ void ResourceSchemaNode::_select_type(int id, Schema* swap_out) {
 				array = dynamic_cast<ArraySchema*>(this->definition.get_schema().get());
 			}
 
-			auto child = ResourceSchemaNode::_new();
+			auto child = ResourceSchemaEditor::_new();
 			child->_custom_init(root, this, { &array->element_type });
 			child->connect("clicked", this, "_child_clicked", Array::make(child));
 			list->add_child(child);
@@ -669,7 +265,17 @@ void ResourceSchemaNode::_select_type(int id, Schema* swap_out) {
 	root->emit_something_changed();
 }
 
-void ResourceSchemaNode::_input(Ref<InputEvent> event) {
+Variant ResourceSchemaEditor::_get_key() {
+	if (field_name->is_visible()) {
+		return field_name->get_text();
+	} else if (auto parent_schema = dynamic_cast<ArraySchema*>(parent->get_schema())) {
+		return get_index();
+	} else {
+		return Variant{};
+	}
+}
+
+void ResourceSchemaEditor::_input(Ref<InputEvent> event) {
 	if (auto mb = Object::cast_to<InputEventMouseButton>(event.ptr())) {
 		if (mb->get_button_index() == GlobalConstants::BUTTON_LEFT && mb->is_pressed() && _is_mouse_inside()) {
 			emit_signal("clicked");
@@ -685,7 +291,7 @@ void ResourceSchemaNode::_input(Ref<InputEvent> event) {
 	}
 }
 
-void ResourceSchemaNode::_notification(int what) {
+void ResourceSchemaEditor::_notification(int what) {
 	switch (what) {
 		case NOTIFICATION_READY: {
 			if (definition.has_name()) {
@@ -702,7 +308,7 @@ void ResourceSchemaNode::_notification(int what) {
 					list->get_child(i)->free();
 				}
 				for (int i = 0; i < other->fields.size(); ++i) {
-					auto child = ResourceSchemaNode::_new();
+					auto child = ResourceSchemaEditor::_new();
 					child->_custom_init(root, this, { &other->fields, static_cast<size_t>(i) });
 					child->connect("clicked", this, "_child_clicked", Array::make(child));
 					list->add_child(child);
@@ -718,7 +324,7 @@ void ResourceSchemaNode::_notification(int what) {
 					get_child_node(0)->free();
 				}
 
-				auto child = ResourceSchemaNode::_new();
+				auto child = ResourceSchemaEditor::_new();
 				child->_custom_init(root, this, { &other->element_type });
 				child->connect("clicked", this, "_child_clicked", Array::make(child));
 				list->add_child(child);
@@ -770,18 +376,18 @@ void ResourceSchemaNode::_notification(int what) {
 	}
 }
 
-void ResourceSchemaNode::_type_selected(int id) {
+void ResourceSchemaEditor::_type_selected(int id) {
 	_select_type(id, nullptr);
 }
 
-void ResourceSchemaNode::_add_list_item() {
+void ResourceSchemaEditor::_add_list_item() {
 	switch (schema_id) {
 		case STRUCT: {
 			auto schema = dynamic_cast<StructSchema*>(this->definition.get_schema().get());
 			int idx = schema->fields.size();
 			schema->fields.push_back({ "", std::make_unique<StructSchema>() });
 
-			auto child = ResourceSchemaNode::_new();
+			auto child = ResourceSchemaEditor::_new();
 			child->_custom_init(root, this, { &schema->fields, static_cast<size_t>(idx) });
 			child->connect("clicked", this, "_child_clicked", Array::make(child));
 			list->add_child(child);
@@ -805,7 +411,7 @@ void ResourceSchemaNode::_add_list_item() {
 	}
 }
 
-void ResourceSchemaNode::_toggle_remove_mode() {
+void ResourceSchemaEditor::_toggle_remove_mode() {
 	switch (schema_id) {
 		case STRUCT:
 		case ENUM: {
@@ -823,7 +429,7 @@ void ResourceSchemaNode::_toggle_remove_mode() {
 	}
 }
 
-void ResourceSchemaNode::_field_name_set(const String& name) {
+void ResourceSchemaEditor::_field_name_set(const String& name) {
 	if (definition.has_name()) {
 		// definition.get_name_ref() = name;
 		auto copy = name;
@@ -832,7 +438,7 @@ void ResourceSchemaNode::_field_name_set(const String& name) {
 	}
 }
 
-void ResourceSchemaNode::_min_value_set(real_t value) {
+void ResourceSchemaEditor::_min_value_set(real_t value) {
 	switch (schema_id) {
 		case ARRAY: {
 			auto schema = dynamic_cast<ArraySchema*>(this->definition.get_schema().get());
@@ -855,7 +461,7 @@ void ResourceSchemaNode::_min_value_set(real_t value) {
 	}
 }
 
-void ResourceSchemaNode::_max_value_set(real_t value) {
+void ResourceSchemaEditor::_max_value_set(real_t value) {
 	switch (schema_id) {
 		case ARRAY: {
 			auto schema = dynamic_cast<ArraySchema*>(this->definition.get_schema().get());
@@ -878,7 +484,7 @@ void ResourceSchemaNode::_max_value_set(real_t value) {
 	}
 }
 
-void ResourceSchemaNode::_pattern_set(const String& pattern) {
+void ResourceSchemaEditor::_pattern_set(const String& pattern) {
 	switch (schema_id) {
 		case STRING: {
 			auto schema = dynamic_cast<StringSchema*>(this->definition.get_schema().get());
@@ -891,7 +497,7 @@ void ResourceSchemaNode::_pattern_set(const String& pattern) {
 	}
 }
 
-void ResourceSchemaNode::_child_clicked(ResourceSchemaNode* child) {
+void ResourceSchemaEditor::_child_clicked(ResourceSchemaEditor* child) {
 	if (!removing_child) {
 		return;
 	}
@@ -925,38 +531,38 @@ void ResourceSchemaNode::_child_clicked(ResourceSchemaNode* child) {
 	}
 }
 
-void ResourceSchemaNode::_enum_name_set(const String& name, Control* child) {
+void ResourceSchemaEditor::_enum_name_set(const String& name, Control* child) {
 	if (auto schema = dynamic_cast<EnumSchema*>(this->definition.get_schema().get())) {
 		schema->elements[child->get_index()].name = name;
 		root->emit_something_changed();
 	}
 }
 
-void ResourceSchemaNode::_enum_id_set(int id, Control* child) {
+void ResourceSchemaEditor::_enum_id_set(int id, Control* child) {
 	if (auto schema = dynamic_cast<EnumSchema*>(this->definition.get_schema().get())) {
 		schema->elements[child->get_index()].id = id;
 		root->emit_something_changed();
 	}
 }
 
-void ResourceSchemaNode::_register_methods() {
-	register_method("_input", &ResourceSchemaNode::_input);
-	register_method("_notification", &ResourceSchemaNode::_notification);
-	register_method("_type_selected", &ResourceSchemaNode::_type_selected);
-	register_method("_add_list_item", &ResourceSchemaNode::_add_list_item);
-	register_method("_toggle_remove_mode", &ResourceSchemaNode::_toggle_remove_mode);
-	register_method("_field_name_set", &ResourceSchemaNode::_field_name_set);
-	register_method("_min_value_set", &ResourceSchemaNode::_min_value_set);
-	register_method("_max_value_set", &ResourceSchemaNode::_max_value_set);
-	register_method("_pattern_set", &ResourceSchemaNode::_pattern_set);
-	register_method("_child_clicked", &ResourceSchemaNode::_child_clicked);
-	register_method("_enum_name_set", &ResourceSchemaNode::_enum_name_set);
-	register_method("_enum_id_set", &ResourceSchemaNode::_enum_id_set);
+void ResourceSchemaEditor::_register_methods() {
+	register_method("_input", &ResourceSchemaEditor::_input);
+	register_method("_notification", &ResourceSchemaEditor::_notification);
+	register_method("_type_selected", &ResourceSchemaEditor::_type_selected);
+	register_method("_add_list_item", &ResourceSchemaEditor::_add_list_item);
+	register_method("_toggle_remove_mode", &ResourceSchemaEditor::_toggle_remove_mode);
+	register_method("_field_name_set", &ResourceSchemaEditor::_field_name_set);
+	register_method("_min_value_set", &ResourceSchemaEditor::_min_value_set);
+	register_method("_max_value_set", &ResourceSchemaEditor::_max_value_set);
+	register_method("_pattern_set", &ResourceSchemaEditor::_pattern_set);
+	register_method("_child_clicked", &ResourceSchemaEditor::_child_clicked);
+	register_method("_enum_name_set", &ResourceSchemaEditor::_enum_name_set);
+	register_method("_enum_id_set", &ResourceSchemaEditor::_enum_id_set);
 
-	register_signal<ResourceSchemaNode>("clicked", Dictionary{});
+	register_signal<ResourceSchemaEditor>("clicked", Dictionary{});
 }
 
-void ResourceSchemaNode::_init() {
+void ResourceSchemaEditor::_init() {
 	add_constant_override("margin_left", 8);
 	add_constant_override("margin_top", 8);
 	add_constant_override("margin_right", 8);
@@ -1031,7 +637,7 @@ void ResourceSchemaNode::_init() {
 	contents->add_child(padding_box);
 }
 
-void ResourceSchemaNode::_custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaNode* parent, DefinitionReference definition) {
+void ResourceSchemaEditor::_custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaEditor* parent, DefinitionReference definition) {
 	this->root = root;
 	this->parent = parent;
 	this->definition = definition;
@@ -1039,27 +645,27 @@ void ResourceSchemaNode::_custom_init(ResourceSchemaInspectorProperty* root, Res
 	// Updating the UI according to the incoming schema is done in _notification::READY when the child nodes are initialized
 }
 
-String ResourceSchemaNode::get_field_name() const {
+String ResourceSchemaEditor::get_field_name() const {
 	return field_name->get_text();
 }
 
-void ResourceSchemaNode::set_field_name(const String& name) {
+void ResourceSchemaEditor::set_field_name(const String& name) {
 	::get_nc_line(field_name)->set_visible(true);
 	field_name->set_text(name);
 }
 
-ResourceSchemaNode* ResourceSchemaNode::get_child_node(int i) {
-	return Object::cast_to<ResourceSchemaNode>(list->get_child(i));
+ResourceSchemaEditor* ResourceSchemaEditor::get_child_node(int i) {
+	return Object::cast_to<ResourceSchemaEditor>(list->get_child(i));
 }
 
-Schema* ResourceSchemaNode::get_schema() {
+Schema* ResourceSchemaEditor::get_schema() {
 	return definition.get_schema().get();
 }
 
-ResourceSchemaNode::ResourceSchemaNode() {
+ResourceSchemaEditor::ResourceSchemaEditor() {
 }
 
-ResourceSchemaNode::~ResourceSchemaNode() {
+ResourceSchemaEditor::~ResourceSchemaEditor() {
 }
 
 void ResourceSchemaInspectorProperty::_toggle_editor_visibility() {
@@ -1074,7 +680,7 @@ void ResourceSchemaInspectorProperty::_toggle_editor_visibility() {
 	}
 }
 
-void ResourceSchemaInspectorProperty::_prop_clicked(ResourceSchemaNode* node) {
+void ResourceSchemaInspectorProperty::_prop_clicked(ResourceSchemaEditor* node) {
 	selected_idx = node->get_index();
 }
 
@@ -1109,10 +715,10 @@ void ResourceSchemaInspectorProperty::_init() {
 	properties->add_child(toolbar);
 }
 
-ResourceSchemaNode* ResourceSchemaInspectorProperty::add_root_property_with(const String& name, std::unique_ptr<Schema> schema) {
+ResourceSchemaEditor* ResourceSchemaInspectorProperty::add_root_property_with(const String& name, std::unique_ptr<Schema> schema) {
 	schemas.push_back({ name, std::move(schema) });
 
-	auto prop = ResourceSchemaNode::_new();
+	auto prop = ResourceSchemaEditor::_new();
 	prop->_custom_init(this, nullptr, { &schemas, schemas.size() - 1 });
 	prop->connect("clicked", this, "_prop_clicked", Array::make(prop));
 	properties->add_child(prop);
@@ -1120,7 +726,7 @@ ResourceSchemaNode* ResourceSchemaInspectorProperty::add_root_property_with(cons
 	return prop;
 }
 
-ResourceSchemaNode* ResourceSchemaInspectorProperty::add_root_property() {
+ResourceSchemaEditor* ResourceSchemaInspectorProperty::add_root_property() {
 	return add_root_property_with("", std::make_unique<StructSchema>());
 }
 
@@ -1137,12 +743,12 @@ void ResourceSchemaInspectorProperty::emit_something_changed() {
 
 	Array saved_props;
 	for (int i = 1; i < properties->get_child_count(); ++i) {
-		if (auto prop = Object::cast_to<ResourceSchemaNode>(properties->get_child(i))) {
+		if (auto prop = Object::cast_to<ResourceSchemaEditor>(properties->get_child(i))) {
 			auto data = save_schema(prop->get_schema());
 			data["name"] = prop->get_field_name();
 			saved_props.append(data);
 		} else {
-			ERR_PRINT("Properties box contains unexpected nodes that aren't of type ResourceSchemaNode");
+			ERR_PRINT("Properties box contains unexpected nodes that aren't of type ResourceSchemaEditor");
 		}
 	}
 
@@ -1160,7 +766,7 @@ void ResourceSchemaInspectorProperty::update_property() {
 	for (int i = 0; i < data.size(); ++i) {
 		Dictionary dict = data[i];
 		// If parsing schema failed, we skip this entry
-		if (auto schema = ::parse_schema(dict)) {
+		if (auto schema = parse_schema(dict)) {
 			add_root_property_with(dict["name"], std::move(schema));
 		} else {
 			ERR_PRINT("Error while parsing schema entry: " + JSON::get_singleton()->print(dict));

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Schema.hpp"
-
 #include <EditorInspectorPlugin.hpp>
 #include <EditorPlugin.hpp>
 #include <Godot.hpp>

@@ -1,5 +1,7 @@
 #include "Plugin.hpp"
-#include "Property.hpp"
+#include "ResourceEditor.hpp"
+#include "Schema.hpp"
+#include "SchemaEditor.hpp"
 #include "Utils.hpp"
 
 #include <Godot.hpp>
@@ -22,7 +24,7 @@ extern "C" void GDN_EXPORT godot_nativescript_init(void* handle) {
 	godot::register_tool_class<ResourceSchema>();
 	godot::register_tool_class<StructEditor>();
 	godot::register_tool_class<ArrayEditor>();
-	godot::register_tool_class<CommonInspectorProperty>();
-	godot::register_tool_class<ResourceSchemaNode>();
+	godot::register_tool_class<ResourceInspectorProperty>();
+	godot::register_tool_class<ResourceSchemaEditor>();
 	godot::register_tool_class<ResourceSchemaInspectorProperty>();
 }

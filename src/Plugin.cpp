@@ -1,8 +1,9 @@
 #include "Plugin.hpp"
-#include "GodotGlobal.hpp"
-#include "Object.hpp"
-#include "Property.hpp"
+#include "ResourceEditor.hpp"
+#include "SchemaEditor.hpp"
 
+#include <GodotGlobal.hpp>
+#include <Object.hpp>
 #include <ResourceLoader.hpp>
 #include <Script.hpp>
 
@@ -64,9 +65,8 @@ bool InspectorPlugin::parse_property(const Object* object, const int64_t type, c
 	Ref<ResourceSchema> ref = ResourceLoader::get_singleton()->load(schema_path);
 	if (ref.is_valid()) {
 		if (auto res = Object::cast_to<ResourceSchema>(ref.ptr())) {
-			// Godot::print(String::num_int64(res->properties.size()));
 			if (auto schema = res->compute_info_for(path)) {
-				auto prop = CommonInspectorProperty::_new();
+				auto prop = ResourceInspectorProperty::_new();
 				prop->_custom_init(std::move(schema));
 
 				add_property_editor(path, prop);

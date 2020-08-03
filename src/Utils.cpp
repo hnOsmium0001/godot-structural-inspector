@@ -38,6 +38,31 @@ NXButton::NXButton() {
 NXButton::~NXButton() {
 }
 
+String godot::structural_inspector::format_variant(const Variant& variant) {
+	switch (variant.get_type()) {
+		case Variant::DICTIONARY: return "dictionary";
+		case Variant::ARRAY: return "array";
+		case Variant::STRING: return "string";
+		case Variant::INT: return "int";
+		case Variant::REAL: return "float";
+		case Variant::BOOL: return "bool";
+		case Variant::OBJECT: return "object";
+		case Variant::NIL: return "nil";
+		case Variant::RECT2: return "rect2";
+		case Variant::RECT3: return "aabb";
+		case Variant::VECTOR2: return "vector2";
+		case Variant::VECTOR3: return "vector3";
+		case Variant::BASIS: return "basis";
+		case Variant::TRANSFORM: return "transform";
+		case Variant::TRANSFORM2D: return "transform2d";
+		case Variant::QUAT: return "quaternion";
+		case Variant::PLANE: return "plane";
+		case Variant::COLOR: return "color";
+		case Variant::NODE_PATH: return "node_path";
+		default: return "unknown";
+	}
+}
+
 size_t std::hash<String>::operator()(const String& str) const noexcept {
 	return str.hash();
 }
