@@ -14,37 +14,41 @@
 #include <OptionButton.hpp>
 #include <SpinBox.hpp>
 #include <VBoxContainer.hpp>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 
 namespace godot::structural_inspector {
 
 class ResourceEditor {
+protected:
+	ResourceInspectorProperty* root;
+	ResourceEditor* parent;
+	Variant key;
+
 public:
-	virtual void propagate_value_update(const Variant& value) = 0;
-	virtual void update_from(const Variant& value) = 0;
+	virtual void write(const Variant& value);
+	virtual void write(const std::function<auto(const Variant&)->Variant>& mapper);
+	virtual void read(const Variant& value) = 0;
+
+	virtual Variant get_key() const;
+	virtual void set_key(const Variant& value);
 };
 
 class StructEditor : public VBoxContainer, public ResourceEditor {
 	GODOT_CLASS(StructEditor, VBoxContainer)
 private:
-	ResourceInspectorProperty* root;
-	ResourceEditor* parent;
 	const StructSchema* schema;
-
 	HBoxContainer* toolbar;
 	Label* title;
 	VBoxContainer* fields;
-
-	Variant key;
 
 public:
 	static void _register_methods();
 	void _init();
 	void _custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const StructSchema* schema, const Variant& key);
 
-	void propagate_value_update(const Variant& value) override;
-	void update_from(const Variant& value) override;
+	void read(const Variant& value) override;
 
 	StructEditor();
 	~StructEditor();
@@ -56,18 +60,13 @@ class ArrayEditor : public VBoxContainer, public ResourceEditor {
 	friend class ArraySchema;
 
 private:
-	ResourceInspectorProperty* root;
-	ResourceEditor* parent;
 	const ArraySchema* schema;
-
 	HBoxContainer* toolbar;
 	Label* title;
 	NXButton* add;
 	NXButton* remove;
 	VBoxContainer* elements;
 	int64_t selected_idx = -1;
-
-	Variant key;
 
 	void _element_gui_input(Ref<InputEvent> event, Control* element);
 	void _add_element();
@@ -78,8 +77,7 @@ public:
 	void _init();
 	void _custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const ArraySchema* schema, const Variant& key);
 
-	void propagate_value_update(const Variant& value) override;
-	void update_from(const Variant& value) override;
+	void read(const Variant& value) override;
 
 	ArrayEditor();
 	~ArrayEditor();
@@ -88,9 +86,7 @@ public:
 class ValueEditor : public HBoxContainer, public ResourceEditor {
 	GODOT_CLASS(ValueEditor, HBoxContainer)
 private:
-	ResourceInspectorProperty* root;
-	ResourceEditor* parent;
-
+	const Schema* schema;
 	Label* label;
 	Control* edit;
 
@@ -99,8 +95,7 @@ public:
 	void _init();
 	void _custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const Schema* schema, const Variant& key);
 
-	void propagate_value_update(const Variant& value) override;
-	void update_from(const Variant& value) override;
+	void read(const Variant& value) override;
 
 	ValueEditor();
 	~ValueEditor();
@@ -112,10 +107,11 @@ private:
 	std::unique_ptr<Schema> schema;
 	Button* btn;
 	Control* editor;
+	ResourceEditor* ieditor;
 	bool updating = false;
 
-	Variant current_value;
-	Array keys_path;
+	Variant staging_key;
+	Variant staging_value;
 
 	void _toggle_editor_visibility();
 

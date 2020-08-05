@@ -628,13 +628,7 @@ void ResourceSchemaEditor::_init() {
 
 	list = VBoxContainer::_new();
 	list->set_visible(false);
-	auto padding_box = MarginContainer::_new();
-	padding_box->add_constant_override("margin_right", 0);
-	padding_box->add_constant_override("margin_top", 0);
-	padding_box->add_constant_override("margin_left", 16);
-	padding_box->add_constant_override("margin_bottom", 0);
-	padding_box->add_child(list);
-	contents->add_child(padding_box);
+	contents->add_child(list);
 }
 
 void ResourceSchemaEditor::_custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaEditor* parent, DefinitionReference definition) {
