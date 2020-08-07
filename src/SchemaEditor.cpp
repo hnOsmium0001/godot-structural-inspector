@@ -590,12 +590,12 @@ void ResourceSchemaEditor::_init() {
 
 	toolbar = HBoxContainer::_new();
 	contents->add_child(toolbar);
-	add = NXButton::_new();
+	add = EditorIconButton::_new();
 	add->_custom_init("Add");
 	add->set_visible(false);
 	add->connect("pressed", this, "_add_list_item");
 	toolbar->add_child(add);
-	remove = NXButton::_new();
+	remove = EditorIconButton::_new();
 	remove->_custom_init("Remove");
 	remove->set_visible(false);
 	remove->connect("pressed", this, "_toggle_remove_mode");
@@ -697,11 +697,11 @@ void ResourceSchemaInspectorProperty::_init() {
 	properties->set_visible(false);
 
 	auto toolbar = HBoxContainer::_new();
-	auto add = NXButton::_new();
+	auto add = EditorIconButton::_new();
 	add->_custom_init("Add");
 	add->connect("pressed", this, "add_root_property");
 	toolbar->add_child(add);
-	auto remove = NXButton::_new();
+	auto remove = EditorIconButton::_new();
 	remove->_custom_init("Remove");
 	remove->connect("pressed", this, "remove_root_property");
 	toolbar->add_child(remove);

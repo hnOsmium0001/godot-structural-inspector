@@ -26,6 +26,9 @@ protected:
 	ResourceEditor* parent;
 	Variant key;
 
+protected:
+	virtual void push_node_key();
+
 public:
 	virtual void write(const Variant& value);
 	virtual void write(const std::function<auto(const Variant&)->Variant>& mapper);
@@ -63,10 +66,12 @@ private:
 	const ArraySchema* schema;
 	HBoxContainer* toolbar;
 	Label* title;
-	NXButton* add;
-	NXButton* remove;
+	EditorIconButton* add;
+	EditorIconButton* remove;
 	VBoxContainer* elements;
 	int64_t selected_idx = -1;
+
+	ResourceEditor* _get_editor_at(int idx);
 
 	void _element_gui_input(Ref<InputEvent> event, Control* element);
 	void _add_element();
@@ -87,7 +92,6 @@ class ValueEditor : public HBoxContainer, public ResourceEditor {
 	GODOT_CLASS(ValueEditor, HBoxContainer)
 private:
 	const Schema* schema;
-	Label* label;
 	Control* edit;
 
 public:

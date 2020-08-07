@@ -9,23 +9,25 @@
 using namespace godot;
 using namespace godot::structural_inspector;
 
-void ResourceEditor::write(const Variant& value) {
-	root->push_key(key);
+void ResourceEditor::push_node_key() {
+	// Decent first to get the parent keys pushed
 	if (parent) {
-		parent->write(value);
-	} else {
-		root->set_current_value(value);
+		parent->push_node_key();
 	}
+	// And then push our key
+	root->push_key(key);
+}
+
+void ResourceEditor::write(const Variant& value) {
+	push_node_key();
+	root->set_current_value(value);
 }
 
 void ResourceEditor::write(const std::function<auto(const Variant&)->Variant>& mapper) {
-	root->push_key(key);
-	if (parent) {
-		parent->write(mapper);
-	} else {
-		auto& value = root->get_current_value();
-		root->set_current_value(mapper(value));
-	}
+	push_node_key();
+	auto& value = root->get_current_value();
+	auto replacement = mapper(value);
+	root->set_current_value(replacement);
 }
 
 Variant ResourceEditor::get_key() const {
@@ -36,32 +38,39 @@ void ResourceEditor::set_key(const Variant& value) {
 	this->key = key;
 }
 
-static std::pair<Control*, ResourceEditor*> create_edit_as_iface(
+static std::pair<Control*, ResourceEditor*> create_edit_overloaded(
 		ResourceInspectorProperty* root,
 		ResourceEditor* parent,
 		const Schema* schema,
-		const Variant& key) {
+		const Variant& key,
+		bool add_border = false) {
 	if (auto sch = dynamic_cast<const StructSchema*>(schema)) {
 		auto edit = StructEditor::_new();
 		edit->_custom_init(root, parent, sch, key);
-		return { edit, edit };
+
+		if (add_border) {
+			auto container = BorderedContainer::_new();
+			container->add_child(edit);
+			return { container, edit };
+		} else {
+			return { edit, edit };
+		}
 	} else if (auto sch = dynamic_cast<const ArraySchema*>(schema)) {
 		auto edit = ArrayEditor::_new();
 		edit->_custom_init(root, parent, sch, key);
-		return { edit, edit };
+
+		if (add_border) {
+			auto container = BorderedContainer::_new();
+			container->add_child(edit);
+			return { container, edit };
+		} else {
+			return { edit, edit };
+		}
 	} else {
 		auto edit = ValueEditor::_new();
 		edit->_custom_init(root, parent, schema, key);
 		return { edit, edit };
 	}
-}
-
-static Control* create_edit_overloaded(
-		ResourceInspectorProperty* root,
-		ResourceEditor* parent,
-		const Schema* schema,
-		const Variant& key) {
-	return create_edit_as_iface(root, parent, schema, key).first;
 }
 
 void StructEditor::_register_methods() {
@@ -81,15 +90,27 @@ void StructEditor::_init() {
 void StructEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const StructSchema* schema, const Variant& key) {
 	this->root = root;
 	this->parent = parent;
+	this->schema = schema;
 	this->key = key;
 
-	if (key.get_type() == Variant::STRING) {
-		title->set_text(key);
+	switch (key.get_type()) {
+		case Variant::STRING: {
+			title->set_text(key);
+		} break;
+		case Variant::INT: {
+			title->set_text("[" + String::num_int64(key) + "]");
+		} break;
+		default: {
+			title->set_visible(false);
+		} break;
 	}
 
+	Dictionary dict{};
 	for (auto& [name, field] : schema->fields) {
-		fields->add_child(create_edit_overloaded(root, this, field.get(), name));
+		dict[name] = Variant{};
+		fields->add_child(create_edit_overloaded(root, this, field.get(), name).first);
 	}
+	write(dict);
 }
 
 void StructEditor::read(const Variant& value) {
@@ -111,6 +132,14 @@ StructEditor::StructEditor() {
 StructEditor::~StructEditor() {
 }
 
+ResourceEditor* ArrayEditor::_get_editor_at(int idx) {
+	if (auto container = Object::cast_to<MarginContainer>(elements->get_child(idx))) {
+		return reinterpret_cast<ResourceEditor*>(container->get_child(0));
+	} else {
+		return nullptr;
+	}
+}
+
 void ArrayEditor::_element_gui_input(Ref<InputEvent> event, Control* element) {
 	if (auto mb = Object::cast_to<InputEventMouseButton>(event.ptr())) {
 		if (element->get_global_rect().has_point(get_global_mouse_position())) {
@@ -123,8 +152,6 @@ void ArrayEditor::_element_gui_input(Ref<InputEvent> event, Control* element) {
 
 void ArrayEditor::_add_element() {
 	int idx = elements->get_child_count();
-	auto element = create_edit_overloaded(root, this, schema->element_type.get(), idx);
-	element->connect("gui_input", this, "_element_gui_input", Array::make(element));
 
 	write([&](const Variant& value) {
 		Array array = value;
@@ -132,11 +159,14 @@ void ArrayEditor::_add_element() {
 		return array;
 	});
 
+	auto element = create_edit_overloaded(root, this, schema->element_type.get(), idx, true).first;
+	element->connect("gui_input", this, "_element_gui_input", Array::make(element));
+
 	elements->add_child(element);
 	if (selected_idx != -1 && selected_idx < elements->get_child_count() - 1) {
 		elements->move_child(element, selected_idx + 1);
 		for (int i = selected_idx + 2; i < elements->get_child_count(); ++i) {
-			reinterpret_cast<ResourceEditor*>(elements->get_child(i))->set_key(i);
+			_get_editor_at(i)->set_key(i);
 		}
 	}
 
@@ -156,7 +186,7 @@ void ArrayEditor::_remove_element() {
 		elements->get_child(selected_idx)->free();
 		// The elements after the freed element was moved forward, as we used free() instead of queue_free()
 		for (int i = selected_idx; i < elements->get_child_count(); ++i) {
-			reinterpret_cast<ResourceEditor*>(elements->get_child(i))->set_key(i - 1);
+			_get_editor_at(i)->set_key(i - 1);
 		}
 
 		selected_idx = -1;
@@ -179,11 +209,11 @@ void ArrayEditor::_init() {
 
 	title = Label::_new();
 	toolbar->add_child(title);
-	add = NXButton::_new();
+	add = EditorIconButton::_new();
 	add->_custom_init("Add");
 	add->connect("pressed", this, "_add_element");
 	toolbar->add_child(add);
-	remove = NXButton::_new();
+	remove = EditorIconButton::_new();
 	remove->_custom_init("Remove");
 	remove->connect("pressed", this, "_remove_element");
 	toolbar->add_child(remove);
@@ -195,15 +225,27 @@ void ArrayEditor::_init() {
 void ArrayEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const ArraySchema* schema, const Variant& key) {
 	this->root = root;
 	this->parent = parent;
+	this->schema = schema;
 	this->key = key;
 
-	if (key.get_type() == Variant::STRING) {
-		title->set_text(key);
+	switch (key.get_type()) {
+		case Variant::STRING: {
+			title->set_text(key);
+		} break;
+		case Variant::INT: {
+			title->set_text("Index" + String::num_int64(key));
+		} break;
+		default: {
+			title->set_visible(false);
+		} break;
 	}
 
+	Array array{};
 	for (int i = 0; i < schema->min_elements; ++i) {
-		elements->add_child(create_edit_overloaded(root, this, schema->element_type.get(), i));
+		array.append(Variant{});
+		elements->add_child(create_edit_overloaded(root, this, schema->element_type.get(), i).first);
 	}
+	write(array);
 }
 
 void ArrayEditor::read(const Variant& value) {
@@ -240,33 +282,50 @@ void ValueEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* 
 	this->key = key;
 
 	if (key.get_type() == Variant::STRING) {
-		label = Label::_new();
+		auto label = Label::_new();
 		label->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 		label->set_text(key);
 		add_child(label);
 	}
 
 	if (auto sch = dynamic_cast<const StringSchema*>(schema)) {
+		write("");
+
 		// TODO pattern filtering
-		edit = LineEdit::_new();
+		this->edit = LineEdit::_new();
 	} else if (auto sch = dynamic_cast<const EnumSchema*>(schema)) {
+		write(Variant{ 0 });
+
 		auto edit = OptionButton::_new();
 		this->edit = edit;
 		for (auto& [name, id] : sch->elements) {
 			edit->get_popup()->add_item(name, id);
 		}
 	} else if (auto sch = dynamic_cast<const IntSchema*>(schema)) {
+		write(Variant{ 0 });
+
 		auto edit = SpinBox::_new();
 		this->edit = edit;
 		edit->set_min(sch->min_value);
 		edit->set_max(sch->max_value);
 	} else if (auto sch = dynamic_cast<const FloatSchema*>(schema)) {
+		write(Variant{ 0 });
+
 		auto edit = SpinBox::_new();
 		this->edit = edit;
 		edit->set_min(sch->min_value);
 		edit->set_max(sch->max_value);
 	} else if (auto sch = dynamic_cast<const BoolSchema*>(schema)) {
-		edit = CheckBox::_new();
+		write(Variant{ false });
+
+		this->edit = CheckBox::_new();
+	} else {
+		// The default value is NIL, no need to set it again
+
+		auto edit = Label::_new();
+		this->edit = edit;
+		edit->set_text("Unknown schema type. This is a bug, please report immediately.");
+		ERR_PRINT("Unknown schema type for ValueEditor.");
 	}
 	edit->set_h_size_flags(Control::SIZE_FILL | Control::SIZE_EXPAND);
 	add_child(edit);
@@ -274,15 +333,15 @@ void ValueEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* 
 
 void ValueEditor::read(const Variant& value) {
 	if (auto sch = dynamic_cast<const StringSchema*>(schema) && value.get_type() == Variant::STRING) {
-		static_cast<LineEdit*>(edit)->set_text(value);
+		Object::cast_to<LineEdit>(edit)->set_text(value);
 	} else if (auto sch = dynamic_cast<const EnumSchema*>(schema) && value.get_type() == Variant::INT) {
-		static_cast<OptionButton*>(edit)->select(value);
+		Object::cast_to<OptionButton>(edit)->select(value);
 	} else if (auto sch = dynamic_cast<const IntSchema*>(schema) && value.get_type() == Variant::INT) {
-		static_cast<SpinBox*>(edit)->set_value(value);
+		Object::cast_to<SpinBox>(edit)->set_value(value);
 	} else if (auto sch = dynamic_cast<const FloatSchema*>(schema) && value.get_type() == Variant::REAL) {
-		static_cast<SpinBox*>(edit)->set_value(value);
+		Object::cast_to<SpinBox>(edit)->set_value(value);
 	} else if (auto sch = dynamic_cast<const BoolSchema*>(schema) && value.get_type() == Variant::BOOL) {
-		static_cast<OptionButton*>(edit)->select(value ? 1 : 0);
+		Object::cast_to<OptionButton>(edit)->select(value ? 1 : 0);
 	}
 }
 
@@ -319,7 +378,7 @@ void ResourceInspectorProperty::_custom_init(std::unique_ptr<Schema> schema_in) 
 	this->schema = std::move(schema_in);
 	auto schema = this->schema.get();
 
-	auto pair = create_edit_as_iface(this, nullptr, schema, Variant{});
+	auto pair = create_edit_overloaded(this, nullptr, schema, Variant{});
 	ieditor = pair.second;
 	editor = pair.first;
 	editor->set_visible(false);
@@ -336,6 +395,7 @@ Variant ResourceInspectorProperty::get_current_value() {
 			return array[staging_key];
 		}
 		case Variant::NIL: {
+			// staging_value == <edited property>
 			return staging_value;
 		}
 		default: {
@@ -351,13 +411,15 @@ void ResourceInspectorProperty::set_current_value(const Variant& value) {
 		case Variant::STRING: {
 			Dictionary dict = staging_value;
 			dict[staging_key] = value;
+			emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
 		} break;
 		case Variant::INT: {
 			Array array = staging_value;
 			array[staging_key] = value;
+			emit_changed(get_edited_property(), get_edited_object()->get(get_edited_property()), "", true);
 		} break;
 		case Variant::NIL: {
-			ERR_PRINT("Cannnot set the edited property directly.");
+			emit_changed(get_edited_property(), value, "", true);
 		} break;
 		default: {
 			// The incoming key was validated in push_key()
@@ -376,6 +438,11 @@ void ResourceInspectorProperty::push_key(const Variant& key) {
 			Array array = staging_value;
 			staging_value = array[key];
 		} break;
+		case Variant::NIL: {
+			// If the incoming key is from the root editor node, we just ignore it
+			// We let the root node pass in its key because logically, the "root" node is a property of the edited object
+			return;
+		}
 		default: break;
 	}
 
@@ -399,8 +466,9 @@ void ResourceInspectorProperty::clear_keys() {
 
 void ResourceInspectorProperty::update_property() {
 	updating = true;
-	// reinterpret_cast<ResourceEditor*>(editor)->read(get_edited_object()->get(get_edited_property()));
-	ieditor->read(get_edited_object()->get(get_edited_property()));
+	auto prop = get_edited_object()->get(get_edited_property());
+	// reinterpret_cast<ResourceEditor*>(editor)->read(prop);
+	ieditor->read(prop);
 	updating = false;
 }
 

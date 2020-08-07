@@ -36,7 +36,7 @@ public:
 class ArraySchema : public Schema, public CloneProvider<ArraySchema> {
 public:
 	std::unique_ptr<Schema> element_type;
-	int min_elements = std::numeric_limits<int>::min();
+	int min_elements = 0;
 	int max_elements = std::numeric_limits<int>::max();
 
 	ArraySchema* clone() const override;

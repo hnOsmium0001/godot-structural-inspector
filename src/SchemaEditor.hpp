@@ -65,9 +65,9 @@ private:
 
 	HBoxContainer* toolbar;
 	// Child of `toolbar`, used by STRUCT, ENUM
-	NXButton* add;
+	EditorIconButton* add;
 	// Child of `toolbar`, used by STRUCT, ENUM
-	NXButton* remove;
+	EditorIconButton* remove;
 	// Child of `toolbar`, used by STRUCT, ENUM
 	Label* message;
 
