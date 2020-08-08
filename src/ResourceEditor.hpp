@@ -20,7 +20,8 @@
 
 namespace godot::structural_inspector {
 
-class ResourceEditor {
+class ResourceEditor : public ListContainer {
+	GODOT_CLASS(ResourceEditor, ListContainer)
 protected:
 	ResourceInspectorProperty* root;
 	ResourceEditor* parent;
@@ -30,21 +31,30 @@ protected:
 	virtual void push_node_key();
 
 public:
+	static void _register_methods();
+	void _init();
+
 	virtual void write(const Variant& value);
 	virtual void write(const std::function<auto(const Variant&)->Variant>& mapper);
-	virtual void read(const Variant& value) = 0;
+	virtual void read(const Variant& value);
 
 	virtual Variant get_key() const;
 	virtual void set_key(const Variant& value);
+
+	ResourceEditor();
+	~ResourceEditor();
 };
 
-class StructEditor : public VBoxContainer, public ResourceEditor {
-	GODOT_CLASS(StructEditor, VBoxContainer)
+class StructEditor : public ResourceEditor {
+	GODOT_CLASS(StructEditor, ResourceEditor)
 private:
 	const StructSchema* schema;
 	HBoxContainer* toolbar;
 	Label* title;
 	VBoxContainer* fields;
+
+	void _notification(int what);
+	Size2 _get_minimum_size();
 
 public:
 	static void _register_methods();
@@ -57,11 +67,8 @@ public:
 	~StructEditor();
 };
 
-class ArrayEditor : public VBoxContainer, public ResourceEditor {
-	GODOT_CLASS(ArrayEditor, VBoxContainer)
-
-	friend class ArraySchema;
-
+class ArrayEditor : public ResourceEditor {
+	GODOT_CLASS(ArrayEditor, ResourceEditor)
 private:
 	const ArraySchema* schema;
 	HBoxContainer* toolbar;
@@ -76,6 +83,8 @@ private:
 	void _element_gui_input(Ref<InputEvent> event, Control* element);
 	void _add_element();
 	void _remove_element();
+	void _notification(int what);
+	Size2 _get_minimum_size();
 
 public:
 	static void _register_methods();
@@ -88,11 +97,14 @@ public:
 	~ArrayEditor();
 };
 
-class ValueEditor : public HBoxContainer, public ResourceEditor {
-	GODOT_CLASS(ValueEditor, HBoxContainer)
+class ValueEditor : public ResourceEditor {
+	GODOT_CLASS(ValueEditor, ResourceEditor)
 private:
 	const Schema* schema;
 	Control* edit;
+
+	void _notification(int what);
+	Size2 _get_minimum_size();
 
 public:
 	static void _register_methods();
@@ -110,8 +122,7 @@ class ResourceInspectorProperty : public EditorProperty {
 private:
 	std::unique_ptr<Schema> schema;
 	Button* btn;
-	Control* editor;
-	ResourceEditor* ieditor;
+	ResourceEditor* editor;
 	bool updating = false;
 
 	Variant staging_key;
@@ -128,7 +139,6 @@ public:
 	void set_current_value(const Variant& value);
 	void push_key(const Variant& key);
 	void clear_keys();
-	void value_mutated();
 
 	void update_property();
 

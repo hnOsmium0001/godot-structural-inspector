@@ -65,41 +65,41 @@ public:
 	~BorderedContainer();
 };
 
-// class ListContainer : public Container {
-// 	GODOT_CLASS(ListContainer, Container)
-// public:
-// 	enum Direction {
-// 		HORIZONTAL,
-// 		VERTICAL,
-// 	};
+class ListContainer : public Container {
+	GODOT_CLASS(ListContainer, Container)
+public:
+	enum Direction {
+		HORIZONTAL,
+		VERTICAL,
+	};
 
-// private:
-// 	Direction dir = VERTICAL;
-// 	int separation = 4;
-// 	bool stretch = false;
+private:
+	Direction dir = VERTICAL;
+	int separation = 2;
+	bool stretch = false;
 
-// 	void _reorder();
+	void _reorder();
 
-// 	void _notification(int what);
+protected:
+	void _notification(int what);
+	Size2 _get_minimum_size();
 
-// public:
-// 	static void _register_methods();
-// 	void _init();
+public:
+	static void _register_methods();
+	void _init();
 
-// 	Direction get_direction() const;
-// 	void set_direction(Direction dir);
+	Direction get_direction() const;
+	void set_direction(Direction dir);
 
-// 	int get_separation() const;
-// 	void set_separation(int separation);
+	int get_separation() const;
+	void set_separation(int separation);
 
-// 	bool is_stretching() const;
-// 	void set_stretching(bool stretching);
+	bool is_stretching() const;
+	void set_stretching(bool stretching);
 
-// 	// Size2 get_minimum_size();
-
-// 	ListContainer();
-// 	~ListContainer();
-// };
+	ListContainer();
+	~ListContainer();
+};
 
 String format_variant(const Variant& variant);
 

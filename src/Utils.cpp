@@ -3,6 +3,7 @@
 #include <InputEvent.hpp>
 #include <InputEventMouseMotion.hpp>
 #include <Texture.hpp>
+#include <algorithm>
 
 using namespace godot;
 using namespace godot::structural_inspector;
@@ -11,8 +12,6 @@ void EditorIconButton::_notification(int what) {
 	switch (what) {
 		case NOTIFICATION_READY: {
 			call_deferred("_apply_icon");
-		} break;
-		default: {
 		} break;
 	}
 }
@@ -82,113 +81,151 @@ BorderedContainer::BorderedContainer() {
 BorderedContainer::~BorderedContainer() {
 }
 
-// void ListContainer::_reorder() {
-// 	// using ComputeNext = Point2(*)(Point2, Size2);
-// 	// static const auto compute_next_pos_horizontal = [](Point2 prev, Size2 size) {
-// 	// 	return Point2{ prev.x + size.x, prev.y };
-// 	// };
-// 	// static const auto compute_next_pos_vertical = [](Point2 prev, Size2 size) {
-// 	// 	return Point2{ prev.x, prev.y + size.y };
-// 	// };
+void ListContainer::_reorder() {
+	auto size = get_size();
 
-// 	auto size = get_size();
+	// TODO handle size flags
+	if (stretch) {
+		// FIXME these should be `int` in 4.0
+		float combined_length = 0;
+		int child_count = 0;
+		for (int i = 0; i < get_child_count(); ++i) {
+			auto child = Object::cast_to<Control>(get_child(i));
+			if (!child) continue;
+			if (!child->is_visible()) continue;
 
-// 	// ComputeNext compute_next_pos = (dir == HORIZONTAL) ? compute_next_pos_horizontal : compute_next_pos_vertical;
+			auto csize = child->get_combined_minimum_size();
+			switch (dir) {
+				case HORIZONTAL: {
+					combined_length += csize.x;
+				} break;
+				case VERTICAL: {
+					combined_length += csize.y;
+				} break;
+			}
 
-// 	Point2 next_pos{ 0, 0 };
-// 	for (int i = 0; i < get_child_count(); ++i) {
-// 		auto child = Object::cast_to<Control>(get_child(i));
-// 		if (!child) continue;
+			++child_count;
+		}
 
-// 		auto csize = child->get_combined_minimum_size();
-// 		child->set_position(next_pos);
+		float unit_length = combined_length / child_count;
+		Point2 next_pos{ 0, 0 };
+		for (int i = 0; i < get_child_count(); ++i) {
+			auto child = Object::cast_to<Control>(get_child(i));
+			if (!child) continue;
+			if (!child->is_visible()) continue;
 
-// 		switch (dir) {
-// 			case HORIZONTAL: {
-// 				next_pos = { next_pos.x + csize.x + separation, next_pos.y };
-// 			} break;
-// 			case VERTICAL: {
-// 				next_pos = { next_pos.x, next_pos.y + csize.y + separation };
-// 			} break;
-// 		}
-// 	}
+			auto csize = child->get_combined_minimum_size();
+			switch (dir) {
+				case HORIZONTAL: {
+					child->set_position(next_pos);
+					// TODO take child minimum size into account
+					child->set_size(Size2{ unit_length, size.y });
+					next_pos = { next_pos.x + unit_length + separation, next_pos.y };
+				} break;
+				case VERTICAL: {
+					child->set_position(next_pos);
+					child->set_size(Size2{ size.x, unit_length });
+					next_pos = { next_pos.x, next_pos.y + unit_length + separation };
+				} break;
+			}
+		}
+	} else {
+		Point2 next_pos{ 0, 0 };
+		for (int i = 0; i < get_child_count(); ++i) {
+			auto child = Object::cast_to<Control>(get_child(i));
+			if (!child) continue;
+			if (!child->is_visible()) continue;
 
-// 	set_size(next_pos);
-// }
+			auto csize = child->get_combined_minimum_size();
 
-// void ListContainer::_notification(int what) {
-// 	switch (what) {
-// 		case NOTIFICATION_SORT_CHILDREN: {
-// 			_reorder();
-// 		} break;
-// 		case NOTIFICATION_DRAW: {
-// 			draw_rect(Rect2{ 0, 0, get_size().x, get_size().y }, Color::hex(0xFFFF00FF), false, 2.0F);
-// 		} break;
-// 		case NOTIFICATION_RESIZED: {
-// 			update();
-// 		} break;
-// 	}
-// }
+			switch (dir) {
+				case HORIZONTAL: {
+					child->set_position(next_pos);
+					child->set_size({ csize.x, size.y });
+					next_pos = { next_pos.x + csize.x + separation, next_pos.y };
+				} break;
+				case VERTICAL: {
+					child->set_position(next_pos);
+					child->set_size({ size.x, csize.y });
+					next_pos = { next_pos.x, next_pos.y + csize.y + separation };
+				} break;
+			}
+		}
+	}
+}
 
-// void ListContainer::_register_methods() {
-// 	register_method("_notification", &ListContainer::_notification);
-// 	// register_method("get_minimum_size", &ListContainer::get_minimum_size);
-// }
+void ListContainer::_notification(int what) {
+	switch (what) {
+		case NOTIFICATION_SORT_CHILDREN: {
+			_reorder();
+		} break;
+	}
+}
 
-// void ListContainer::_init() {
-// }
+Size2 ListContainer::_get_minimum_size() {
+	Size2 min_size;
+	for (int i = 0; i < get_child_count(); ++i) {
+		auto child = Object::cast_to<Control>(get_child(i));
+		if (!child) continue;
+		if (!child->is_visible()) continue;
 
-// ListContainer::Direction ListContainer::get_direction() const {
-// 	return dir;
-// }
+		auto csize = child->get_combined_minimum_size();
+		switch (dir) {
+			case HORIZONTAL: {
+				min_size.x += csize.x + separation;
+				min_size.y = std::max(min_size.y, csize.y);
+			} break;
+			case VERTICAL: {
+				min_size.x = std::max(min_size.x, csize.x);
+				min_size.y += csize.y + separation;
+			} break;
+		}
+	}
+	min_size.x -= separation;
+	min_size.y -= separation;
+	return min_size;
+}
 
-// void ListContainer::set_direction(Direction dir) {
-// 	this->dir = dir;
-// 	queue_sort();
-// }
+void ListContainer::_register_methods() {
+	register_method("_notification", &ListContainer::_notification);
+	register_method("_get_minimum_size", &ListContainer::_get_minimum_size);
+}
 
-// int ListContainer::get_separation() const {
-// 	return separation;
-// }
+void ListContainer::_init() {
+}
 
-// void ListContainer::set_separation(int separation) {
-// 	this->separation = separation;
-// 	queue_sort();
-// }
+ListContainer::Direction ListContainer::get_direction() const {
+	return dir;
+}
 
-// bool ListContainer::is_stretching() const {
-// 	return stretch;
-// }
+void ListContainer::set_direction(Direction dir) {
+	this->dir = dir;
+	queue_sort();
+}
 
-// void ListContainer::set_stretching(bool stretch) {
-// 	this->stretch = stretch;
-// 	queue_sort();
-// }
+int ListContainer::get_separation() const {
+	return separation;
+}
 
-// // Size2 ListContainer::get_minimum_size() {
-// // 	Size2 result;
-// // 	for (int i = 0; i < get_child_count(); ++i) {
-// // 		auto child = Object::cast_to<Control>(get_child(i));
-// // 		if (!child) continue;
+void ListContainer::set_separation(int separation) {
+	this->separation = separation;
+	queue_sort();
+}
 
-// // 		auto csize = child->get_size();
-// // 		switch (dir) {
-// // 			case HORIZONTAL: {
-// // 				result.x += csize.x + separation;
-// // 			} break;
-// // 			case VERTICAL: {
-// // 				result.y += csize.y + separation;
-// // 			} break;
-// // 		}
-// // 	}
-// // 	return result;
-// // }
+bool ListContainer::is_stretching() const {
+	return stretch;
+}
 
-// ListContainer::ListContainer() {
-// }
+void ListContainer::set_stretching(bool stretch) {
+	this->stretch = stretch;
+	queue_sort();
+}
 
-// ListContainer::~ListContainer() {
-// }
+ListContainer::ListContainer() {
+}
+
+ListContainer::~ListContainer() {
+}
 
 String godot::structural_inspector::format_variant(const Variant& variant) {
 	switch (variant.get_type()) {

@@ -18,6 +18,12 @@ void ResourceEditor::push_node_key() {
 	root->push_key(key);
 }
 
+void ResourceEditor::_register_methods() {
+}
+
+void ResourceEditor::_init() {
+}
+
 void ResourceEditor::write(const Variant& value) {
 	push_node_key();
 	root->set_current_value(value);
@@ -30,12 +36,21 @@ void ResourceEditor::write(const std::function<auto(const Variant&)->Variant>& m
 	root->set_current_value(replacement);
 }
 
+void ResourceEditor::read(const Variant& value) {
+}
+
 Variant ResourceEditor::get_key() const {
 	return key;
 }
 
 void ResourceEditor::set_key(const Variant& value) {
 	this->key = key;
+}
+
+ResourceEditor::ResourceEditor() {
+}
+
+ResourceEditor::~ResourceEditor() {
 }
 
 static std::pair<Control*, ResourceEditor*> create_edit_overloaded(
@@ -73,10 +88,22 @@ static std::pair<Control*, ResourceEditor*> create_edit_overloaded(
 	}
 }
 
+void StructEditor::_notification(int what) {
+	ListContainer::_notification(what);
+}
+
+Size2 StructEditor::_get_minimum_size() {
+	return ListContainer::get_minimum_size();
+}
+
 void StructEditor::_register_methods() {
+	register_method("_notification", &ListContainer::_notification);
+	register_method("_get_minimum_size", &ListContainer::_get_minimum_size);
 }
 
 void StructEditor::_init() {
+	set_direction(VERTICAL);
+
 	toolbar = HBoxContainer::_new();
 	add_child(toolbar);
 
@@ -197,13 +224,25 @@ void ArrayEditor::_remove_element() {
 	}
 }
 
+void ArrayEditor::_notification(int what) {
+	ListContainer::_notification(what);
+}
+
+Size2 ArrayEditor::_get_minimum_size() {
+	return ListContainer::get_minimum_size();
+}
+
 void ArrayEditor::_register_methods() {
+	register_method("_notification", &ListContainer::_notification);
+	register_method("_get_minimum_size", &ListContainer::_get_minimum_size);
 	register_method("_element_gui_input", &ArrayEditor::_element_gui_input);
 	register_method("_add_element", &ArrayEditor::_add_element);
 	register_method("_remove_element", &ArrayEditor::_remove_element);
 }
 
 void ArrayEditor::_init() {
+	set_direction(VERTICAL);
+
 	toolbar = HBoxContainer::_new();
 	add_child(toolbar);
 
@@ -269,10 +308,22 @@ ArrayEditor::ArrayEditor() {
 ArrayEditor::~ArrayEditor() {
 }
 
+void ValueEditor::_notification(int what) {
+	ListContainer::_notification(what);
+}
+
+Size2 ValueEditor::_get_minimum_size() {
+	return ListContainer::get_minimum_size();
+}
+
 void ValueEditor::_register_methods() {
+	register_method("_notification", &ListContainer::_notification);
+	register_method("_get_minimum_size", &ListContainer::_get_minimum_size);
 }
 
 void ValueEditor::_init() {
+	set_direction(HORIZONTAL);
+	set_stretching(true);
 }
 
 void ValueEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const Schema* schema, const Variant& key) {
@@ -378,9 +429,7 @@ void ResourceInspectorProperty::_custom_init(std::unique_ptr<Schema> schema_in) 
 	this->schema = std::move(schema_in);
 	auto schema = this->schema.get();
 
-	auto pair = create_edit_overloaded(this, nullptr, schema, Variant{});
-	ieditor = pair.second;
-	editor = pair.first;
+	editor = create_edit_overloaded(this, nullptr, schema, Variant{}).second;
 	editor->set_visible(false);
 }
 
@@ -467,8 +516,7 @@ void ResourceInspectorProperty::clear_keys() {
 void ResourceInspectorProperty::update_property() {
 	updating = true;
 	auto prop = get_edited_object()->get(get_edited_property());
-	// reinterpret_cast<ResourceEditor*>(editor)->read(prop);
-	ieditor->read(prop);
+	editor->read(prop);
 	updating = false;
 }
 

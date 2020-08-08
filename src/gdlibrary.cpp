@@ -20,10 +20,11 @@ extern "C" void GDN_EXPORT godot_nativescript_init(void* handle) {
 	using namespace godot::structural_inspector;
 	godot::register_tool_class<EditorIconButton>();
 	godot::register_tool_class<BorderedContainer>();
-	// godot::register_tool_class<ListContainer>();
+	godot::register_tool_class<ListContainer>();
 	godot::register_tool_class<Plugin>();
 	godot::register_tool_class<InspectorPlugin>();
 	godot::register_tool_class<ResourceSchema>();
+	godot::register_tool_class<ResourceEditor>();
 	godot::register_tool_class<StructEditor>();
 	godot::register_tool_class<ArrayEditor>();
 	godot::register_tool_class<ValueEditor>();

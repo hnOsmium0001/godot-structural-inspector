@@ -9,6 +9,11 @@
 config_version=4
 
 _global_script_classes=[ {
+"base": "",
+"class": "ListContainer",
+"language": "NativeScript",
+"path": "res://addons/structural_inspector/ListContainer.gdns"
+}, {
 "base": "Resource",
 "class": "ResourceSchema",
 "language": "NativeScript",
@@ -20,6 +25,7 @@ _global_script_classes=[ {
 "path": "res://test/TestResource.gd"
 } ]
 _global_script_class_icons={
+"ListContainer": "",
 "ResourceSchema": "",
 "TestResource": ""
 }
