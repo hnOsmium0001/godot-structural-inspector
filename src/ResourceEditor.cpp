@@ -88,17 +88,33 @@ static std::pair<Control*, ResourceEditor*> create_edit_overloaded(
 	}
 }
 
+static void format_key_to(const Variant& key, Label* label) {
+	switch (key.get_type()) {
+		case Variant::STRING: {
+			label->set_visible(true);
+			label->set_text(key);
+		} break;
+		case Variant::INT: {
+			label->set_visible(true);
+			label->set_text("[" + String::num_int64(key) + "]");
+		} break;
+		default: {
+			label->set_visible(false);			
+		} break;
+	}
+}
+
 void StructEditor::_notification(int what) {
 	ListContainer::_notification(what);
 }
 
 Size2 StructEditor::_get_minimum_size() {
-	return ListContainer::get_minimum_size();
+	return ListContainer::_get_minimum_size();
 }
 
 void StructEditor::_register_methods() {
-	register_method("_notification", &ListContainer::_notification);
-	register_method("_get_minimum_size", &ListContainer::_get_minimum_size);
+	register_method("_notification", &StructEditor::_notification);
+	register_method("_get_minimum_size", &StructEditor::_get_minimum_size);
 }
 
 void StructEditor::_init() {
@@ -120,17 +136,7 @@ void StructEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor*
 	this->schema = schema;
 	this->key = key;
 
-	switch (key.get_type()) {
-		case Variant::STRING: {
-			title->set_text(key);
-		} break;
-		case Variant::INT: {
-			title->set_text("[" + String::num_int64(key) + "]");
-		} break;
-		default: {
-			title->set_visible(false);
-		} break;
-	}
+	format_key_to(key, title);
 
 	Dictionary dict{};
 	for (auto& [name, field] : schema->fields) {
@@ -229,12 +235,12 @@ void ArrayEditor::_notification(int what) {
 }
 
 Size2 ArrayEditor::_get_minimum_size() {
-	return ListContainer::get_minimum_size();
+	return ListContainer::_get_minimum_size();
 }
 
 void ArrayEditor::_register_methods() {
-	register_method("_notification", &ListContainer::_notification);
-	register_method("_get_minimum_size", &ListContainer::_get_minimum_size);
+	register_method("_notification", &ArrayEditor::_notification);
+	register_method("_get_minimum_size", &ArrayEditor::_get_minimum_size);
 	register_method("_element_gui_input", &ArrayEditor::_element_gui_input);
 	register_method("_add_element", &ArrayEditor::_add_element);
 	register_method("_remove_element", &ArrayEditor::_remove_element);
@@ -267,19 +273,9 @@ void ArrayEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* 
 	this->schema = schema;
 	this->key = key;
 
-	switch (key.get_type()) {
-		case Variant::STRING: {
-			title->set_text(key);
-		} break;
-		case Variant::INT: {
-			title->set_text("Index" + String::num_int64(key));
-		} break;
-		default: {
-			title->set_visible(false);
-		} break;
-	}
+	format_key_to(key, title);
 
-	Array array{};
+	Array array;
 	for (int i = 0; i < schema->min_elements; ++i) {
 		array.append(Variant{});
 		elements->add_child(create_edit_overloaded(root, this, schema->element_type.get(), i).first);
@@ -313,12 +309,37 @@ void ValueEditor::_notification(int what) {
 }
 
 Size2 ValueEditor::_get_minimum_size() {
-	return ListContainer::get_minimum_size();
+	return ListContainer::_get_minimum_size();
+}
+
+void ValueEditor::_update_string_value(const String& value) {
+	write(value);
+}
+
+void ValueEditor::_update_enum_value(int idx) {
+	write(idx);
+}
+
+void ValueEditor::_update_int_value(int value) {
+	write(value);
+}
+
+void ValueEditor::_update_float_value(float value) {
+	write(value);
+}
+
+void ValueEditor::_update_bool_value(bool value) {
+	write(value);
 }
 
 void ValueEditor::_register_methods() {
-	register_method("_notification", &ListContainer::_notification);
-	register_method("_get_minimum_size", &ListContainer::_get_minimum_size);
+	register_method("_notification", &ValueEditor::_notification);
+	register_method("_get_minimum_size", &ValueEditor::_get_minimum_size);
+	register_method("_update_string_value", &ValueEditor::_update_string_value);
+	register_method("_update_enum_value", &ValueEditor::_update_enum_value);
+	register_method("_update_int_value", &ValueEditor::_update_int_value);
+	register_method("_update_float_value", &ValueEditor::_update_float_value);
+	register_method("_update_bool_value", &ValueEditor::_update_bool_value);
 }
 
 void ValueEditor::_init() {
@@ -343,12 +364,15 @@ void ValueEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* 
 		write("");
 
 		// TODO pattern filtering
-		this->edit = LineEdit::_new();
+		auto edit = LineEdit::_new();
+		this->edit = edit;
+		edit->connect("text_changed", this, "_update_string_value");
 	} else if (auto sch = dynamic_cast<const EnumSchema*>(schema)) {
 		write(Variant{ 0 });
 
 		auto edit = OptionButton::_new();
 		this->edit = edit;
+		edit->connect("item_selected", this, "_update_enum_value");
 		for (auto& [name, id] : sch->elements) {
 			edit->get_popup()->add_item(name, id);
 		}
@@ -359,6 +383,7 @@ void ValueEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* 
 		this->edit = edit;
 		edit->set_min(sch->min_value);
 		edit->set_max(sch->max_value);
+		edit->connect("value_changed", this, "_update_int_value");
 	} else if (auto sch = dynamic_cast<const FloatSchema*>(schema)) {
 		write(Variant{ 0 });
 
@@ -366,10 +391,13 @@ void ValueEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* 
 		this->edit = edit;
 		edit->set_min(sch->min_value);
 		edit->set_max(sch->max_value);
+		edit->connect("value_changed", this, "_update_float_value");
 	} else if (auto sch = dynamic_cast<const BoolSchema*>(schema)) {
 		write(Variant{ false });
 
-		this->edit = CheckBox::_new();
+		auto edit = CheckBox::_new();
+		this->edit = edit;
+		edit->connect("toggled", this, "_update_bool_value");
 	} else {
 		// The default value is NIL, no need to set it again
 

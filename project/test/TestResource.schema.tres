@@ -30,12 +30,12 @@ properties = [ {
 } ]
 }, {
 "element_type": {
-"max_value": -2147483648,
+"max_value": 500,
 "min_value": 0,
 "type": "int"
 },
-"max_elements": -2147483648,
-"min_elements": 0,
+"max_elements": 2147483647,
+"min_elements": 1,
 "name": "linked_ids",
 "type": "array"
 }, {
@@ -44,8 +44,8 @@ properties = [ {
 "name": "a",
 "type": "string"
 }, {
-"max_value": -2147483648,
-"min_value": -2147483648,
+"max_value": 45,
+"min_value": 0,
 "name": "b",
 "type": "int"
 } ],

@@ -87,7 +87,7 @@ void ListContainer::_reorder() {
 	// TODO handle size flags
 	if (stretch) {
 		// FIXME these should be `int` in 4.0
-		float combined_length = 0;
+		float combined_length_a = 0;
 		int child_count = 0;
 		for (int i = 0; i < get_child_count(); ++i) {
 			auto child = Object::cast_to<Control>(get_child(i));
@@ -97,16 +97,17 @@ void ListContainer::_reorder() {
 			auto csize = child->get_combined_minimum_size();
 			switch (dir) {
 				case HORIZONTAL: {
-					combined_length += csize.x;
+					combined_length_a += csize.x;
 				} break;
 				case VERTICAL: {
-					combined_length += csize.y;
+					combined_length_a += csize.y;
 				} break;
 			}
 
 			++child_count;
 		}
 
+		float combined_length = dir == HORIZONTAL ? size.x : size.y;
 		float unit_length = combined_length / child_count;
 		Point2 next_pos{ 0, 0 };
 		for (int i = 0; i < get_child_count(); ++i) {
@@ -119,12 +120,12 @@ void ListContainer::_reorder() {
 				case HORIZONTAL: {
 					child->set_position(next_pos);
 					// TODO take child minimum size into account
-					child->set_size(Size2{ unit_length, size.y });
+					child->set_size({ unit_length, size.y });
 					next_pos = { next_pos.x + unit_length + separation, next_pos.y };
 				} break;
 				case VERTICAL: {
 					child->set_position(next_pos);
-					child->set_size(Size2{ size.x, unit_length });
+					child->set_size({ size.x, unit_length });
 					next_pos = { next_pos.x, next_pos.y + unit_length + separation };
 				} break;
 			}
@@ -187,8 +188,8 @@ Size2 ListContainer::_get_minimum_size() {
 }
 
 void ListContainer::_register_methods() {
-	register_method("_notification", &ListContainer::_notification);
-	register_method("_get_minimum_size", &ListContainer::_get_minimum_size);
+	// register_method("_notification", &ListContainer::_notification);
+	// register_method("_get_minimum_size", &ListContainer::_get_minimum_size);
 }
 
 void ListContainer::_init() {

@@ -4,4 +4,10 @@
 
 [resource]
 script = ExtResource( 1 )
-contents = 0
+contents = {
+"idx": null,
+"linked_ids": null,
+"name": null,
+"nested_array": null,
+"type": null
+}

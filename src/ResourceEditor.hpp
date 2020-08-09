@@ -105,6 +105,11 @@ private:
 
 	void _notification(int what);
 	Size2 _get_minimum_size();
+	void _update_string_value(const String& value);
+	void _update_enum_value(int idx);
+	void _update_int_value(int value);
+	void _update_float_value(float value);
+	void _update_bool_value(bool value);
 
 public:
 	static void _register_methods();
