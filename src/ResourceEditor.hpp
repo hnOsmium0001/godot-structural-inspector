@@ -25,22 +25,14 @@ class ResourceEditor : public ListContainer {
 protected:
 	ResourceInspectorProperty* root;
 	ResourceEditor* parent;
-	Variant key;
-
-protected:
-	void push_node_key();
-	Variant get_current_value();
 
 public:
 	static void _register_methods();
 	void _init();
 
-	virtual void write(const Variant& value);
-	virtual void write(const std::function<auto(const Variant&)->Variant>& mapper);
+	virtual void set_key(const Variant& key);
 	virtual void read(const Variant& value);
-
-	virtual Variant get_key() const;
-	virtual void set_key(const Variant& value);
+	virtual Variant save() const;
 
 	ResourceEditor();
 	~ResourceEditor();
@@ -62,7 +54,9 @@ public:
 	void _init();
 	void _custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const StructSchema* schema, const Variant& key);
 
+	void set_key(const Variant& key) override;
 	void read(const Variant& value) override;
+	Variant save() const override;
 
 	StructEditor();
 	~StructEditor();
@@ -92,7 +86,9 @@ public:
 	void _init();
 	void _custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const ArraySchema* schema, const Variant& key);
 
+	void set_key(const Variant& key) override;
 	void read(const Variant& value) override;
+	Variant save() const override;
 
 	ArrayEditor();
 	~ArrayEditor();
@@ -102,6 +98,7 @@ class ValueEditor : public ResourceEditor {
 	GODOT_CLASS(ValueEditor, ResourceEditor)
 private:
 	const Schema* schema;
+	Label* title;
 	Control* edit;
 
 	void _notification(int what);
@@ -117,7 +114,9 @@ public:
 	void _init();
 	void _custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const Schema* schema, const Variant& key);
 
+	void set_key(const Variant& key) override;
 	void read(const Variant& value) override;
+	Variant save() const override;
 
 	ValueEditor();
 	~ValueEditor();
@@ -141,10 +140,7 @@ public:
 	void _init();
 	void _custom_init(std::unique_ptr<Schema> schema);
 
-	Variant get_current_value();
-	void set_current_value(const Variant& value);
-	void push_key(const Variant& key);
-	void clear_keys();
+	void emit_something_changed();
 
 	void update_property();
 

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" load_steps=2 format=2]
+
+[ext_resource path="res://test/TestResource.gd" type="Script" id=1]
+
+[resource]
+script = ExtResource( 1 )
+contents = [ {
+"idx": 10,
+"linked_ids": [ 6, 24 ],
+"name": "fsdf",
+"nested_array": [ {
+"a": "tset",
+"b": 11
+}, {
+"a": "test 2",
+"b": 35
+} ],
+"type": 1
+} ]

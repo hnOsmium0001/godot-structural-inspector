@@ -7,7 +7,7 @@ script = ExtResource( 1 )
 properties = [ {
 "element_type": {
 "fields": [ {
-"max_value": -2147483648,
+"max_value": 999999,
 "min_value": 0,
 "name": "idx",
 "type": "int"
@@ -35,7 +35,7 @@ properties = [ {
 "type": "int"
 },
 "max_elements": 2147483647,
-"min_elements": 1,
+"min_elements": 0,
 "name": "linked_ids",
 "type": "array"
 }, {
