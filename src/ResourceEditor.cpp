@@ -3,6 +3,7 @@
 #include <CheckBox.hpp>
 #include <InputEvent.hpp>
 #include <InputEventMouseButton.hpp>
+#include <JSON.hpp>
 #include <PopupMenu.hpp>
 #include <utility>
 
@@ -18,6 +19,11 @@ void ResourceEditor::push_node_key() {
 	root->push_key(key);
 }
 
+Variant ResourceEditor::get_current_value() {
+	push_node_key();
+	return root->get_current_value();
+}
+
 void ResourceEditor::_register_methods() {
 }
 
@@ -27,6 +33,7 @@ void ResourceEditor::_init() {
 void ResourceEditor::write(const Variant& value) {
 	push_node_key();
 	root->set_current_value(value);
+	root->clear_keys();
 }
 
 void ResourceEditor::write(const std::function<auto(const Variant&)->Variant>& mapper) {
@@ -34,6 +41,7 @@ void ResourceEditor::write(const std::function<auto(const Variant&)->Variant>& m
 	auto& value = root->get_current_value();
 	auto replacement = mapper(value);
 	root->set_current_value(replacement);
+	root->clear_keys();
 }
 
 void ResourceEditor::read(const Variant& value) {
@@ -99,7 +107,7 @@ static void format_key_to(const Variant& key, Label* label) {
 			label->set_text("[" + String::num_int64(key) + "]");
 		} break;
 		default: {
-			label->set_visible(false);			
+			label->set_visible(false);
 		} break;
 	}
 }
@@ -138,12 +146,15 @@ void StructEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor*
 
 	format_key_to(key, title);
 
-	Dictionary dict{};
+	auto curr = get_current_value();
+	if (curr.get_type() != Variant::DICTIONARY) {
+		ERR_PRINT("An StructEditr node found to be linked to a non-dictionary value: " + JSON::get_singleton()->print(curr));
+		write(Dictionary{});
+	}
+
 	for (auto& [name, field] : schema->fields) {
-		dict[name] = Variant{};
 		fields->add_child(create_edit_overloaded(root, this, field.get(), name).first);
 	}
-	write(dict);
 }
 
 void StructEditor::read(const Variant& value) {
@@ -275,12 +286,20 @@ void ArrayEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* 
 
 	format_key_to(key, title);
 
-	Array array;
-	for (int i = 0; i < schema->min_elements; ++i) {
-		array.append(Variant{});
-		elements->add_child(create_edit_overloaded(root, this, schema->element_type.get(), i).first);
+	auto curr = get_current_value();
+	if (curr.get_type() != Variant::ARRAY) {
+		ERR_PRINT("An ArrayEditor node found to be linked to a non-array value: " + JSON::get_singleton()->print(curr));
+		Array array;
+		for (int i = 0; i < schema->min_elements; ++i) {
+			array.append(Variant{});
+			elements->add_child(create_edit_overloaded(root, this, schema->element_type.get(), i).first);
+		}
+		write(array);
+	} else {
+		for (int i = 0; i < schema->min_elements; ++i) {
+			elements->add_child(create_edit_overloaded(root, this, schema->element_type.get(), i).first);
+		}
 	}
-	write(array);
 }
 
 void ArrayEditor::read(const Variant& value) {
@@ -293,8 +312,13 @@ void ArrayEditor::read(const Variant& value) {
 		return;
 	}
 
+	for (int i = 0; i < elements->get_child_count(); ++i) {
+		elements->get_child(i)->free();
+	}
 	for (int i = 0; i < array.size(); ++i) {
-		reinterpret_cast<ResourceEditor*>(elements->get_child(i))->read(array[i]);
+		auto [container, editor] = create_edit_overloaded(root, this, schema->element_type.get(), i, true);
+		elements->add_child(container);
+		editor->read(array[i]);
 	}
 }
 

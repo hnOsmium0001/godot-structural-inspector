@@ -28,7 +28,8 @@ protected:
 	Variant key;
 
 protected:
-	virtual void push_node_key();
+	void push_node_key();
+	Variant get_current_value();
 
 public:
 	static void _register_methods();
