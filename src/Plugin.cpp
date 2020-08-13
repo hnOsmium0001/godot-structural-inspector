@@ -33,7 +33,8 @@ bool InspectorPlugin::can_handle(const Object* object) {
 	if (script.is_valid()) {
 		auto script_path = script->get_path();
 		auto schema_path = script_path.substr(0, script_path.find_last(".")) + ".schema.tres";
-		if (auto resource = ResourceLoader::get_singleton()->load(schema_path); resource.is_valid()) {
+		if (ResourceLoader::get_singleton()->exists(schema_path)) {
+			auto resource = ResourceLoader::get_singleton()->load(schema_path);
 			return Object::cast_to<ResourceSchema>(resource.ptr()) != nullptr;
 		}
 

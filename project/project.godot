@@ -9,15 +9,10 @@
 config_version=4
 
 _global_script_classes=[ {
-"base": "Container",
-"class": "ListContainer",
-"language": "NativeScript",
-"path": "res://addons/structural_inspector/ListContainer.gdns"
-}, {
-"base": "Resource",
+"base": "",
 "class": "ResourceSchema",
 "language": "NativeScript",
-"path": "res://addons/structural_inspector/ResourceSchema.gdns"
+"path": "res://addons/structural-inspector/ResourceSchema.gdns"
 }, {
 "base": "Resource",
 "class": "TestResource",
@@ -25,7 +20,6 @@ _global_script_classes=[ {
 "path": "res://test/TestResource.gd"
 } ]
 _global_script_class_icons={
-"ListContainer": "",
 "ResourceSchema": "",
 "TestResource": ""
 }
@@ -37,7 +31,7 @@ config/icon="res://icon.png"
 
 [editor_plugins]
 
-enabled=PoolStringArray( "structural_inspector" )
+enabled=PoolStringArray( "structural-inspector" )
 
 [rendering]
 

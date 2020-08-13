@@ -5,6 +5,7 @@
 #include <InputEventMouseButton.hpp>
 #include <JSON.hpp>
 #include <PopupMenu.hpp>
+#include <Texture.hpp>
 #include <utility>
 
 using namespace godot;
@@ -232,6 +233,7 @@ Size2 ArrayEditor::_get_minimum_size() {
 }
 
 void ArrayEditor::_register_methods() {
+	register_method("_post_init", &ArrayEditor::_post_init);
 	register_method("_notification", &ArrayEditor::_notification);
 	register_method("_get_minimum_size", &ArrayEditor::_get_minimum_size);
 	register_method("_element_gui_input", &ArrayEditor::_element_gui_input);
@@ -247,17 +249,24 @@ void ArrayEditor::_init() {
 
 	title = Label::_new();
 	toolbar->add_child(title);
-	add = EditorIconButton::_new();
-	add->_custom_init("Add");
+	add = Button::_new();
+	add->set_flat(true);
 	add->connect("pressed", this, "_add_element");
 	toolbar->add_child(add);
-	remove = EditorIconButton::_new();
-	remove->_custom_init("Remove");
+	remove = Button::_new();
+	remove->set_flat(true);
 	remove->connect("pressed", this, "_remove_element");
 	toolbar->add_child(remove);
 
 	elements = VBoxContainer::_new();
 	add_child(elements);
+
+	call_deferred("_post_init");
+}
+
+void ArrayEditor::_post_init() {
+	add->set_button_icon(get_icon("Add", "EditorIcons"));
+	remove->set_button_icon(get_icon("Remove", "EditorIcons"));
 }
 
 void ArrayEditor::_custom_init(ResourceInspectorProperty* root, ResourceEditor* parent, const ArraySchema* schema, const Variant& key) {
@@ -447,11 +456,17 @@ void ResourceInspectorProperty::_toggle_editor_visibility() {
 		remove_child(editor);
 		set_bottom_editor(nullptr);
 		editor->set_visible(false);
+		btn->set_text("Expand");
 	} else {
 		add_child(editor);
 		set_bottom_editor(editor);
 		editor->set_visible(true);
+		btn->set_text("Collapse");
 	}
+}
+
+void ResourceInspectorProperty::_update_btn_text() {
+	// TODO
 }
 
 void ResourceInspectorProperty::_register_methods() {

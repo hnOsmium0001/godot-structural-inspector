@@ -10,11 +10,6 @@
 
 namespace godot::structural_inspector {
 
-template <class... Ts>
-struct Overloaded : Ts... { using Ts::operator()...; };
-template <class... Ts>
-Overloaded(Ts...)->Overloaded<Ts...>;
-
 template <class This>
 class CloneProvider {
 public:
@@ -30,23 +25,6 @@ class Iterator {
 public:
 	virtual bool has_next() const = 0;
 	virtual T next() = 0;
-};
-
-class EditorIconButton : public Button {
-	GODOT_CLASS(EditorIconButton, Button)
-private:
-	String icon_name;
-
-	void _notification(int what);
-	void _apply_icon();
-
-public:
-	static void _register_methods();
-	void _init();
-	void _custom_init(const String& icon_name);
-
-	EditorIconButton();
-	~EditorIconButton();
 };
 
 class BorderedContainer : public MarginContainer {

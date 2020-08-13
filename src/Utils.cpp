@@ -2,42 +2,10 @@
 
 #include <InputEvent.hpp>
 #include <InputEventMouseMotion.hpp>
-#include <Texture.hpp>
 #include <algorithm>
 
 using namespace godot;
 using namespace godot::structural_inspector;
-
-void EditorIconButton::_notification(int what) {
-	switch (what) {
-		case NOTIFICATION_READY: {
-			call_deferred("_apply_icon");
-		} break;
-	}
-}
-
-void EditorIconButton::_apply_icon() {
-	set_button_icon(get_icon(icon_name, "EditorIcons"));
-}
-
-void EditorIconButton::_register_methods() {
-	register_method("_notification", &EditorIconButton::_notification);
-	register_method("_apply_icon", &EditorIconButton::_apply_icon);
-}
-
-void EditorIconButton::_init() {
-	set_flat(true);
-}
-
-void EditorIconButton::_custom_init(const String& icon_name) {
-	this->icon_name = icon_name;
-}
-
-EditorIconButton::EditorIconButton() {
-}
-
-EditorIconButton::~EditorIconButton() {
-}
 
 void BorderedContainer::_notification(int what) {
 	switch (what) {

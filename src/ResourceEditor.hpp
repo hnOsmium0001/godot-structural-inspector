@@ -68,13 +68,14 @@ private:
 	const ArraySchema* schema;
 	HBoxContainer* toolbar;
 	Label* title;
-	EditorIconButton* add;
-	EditorIconButton* remove;
+	Button* add;
+	Button* remove;
 	VBoxContainer* elements;
 	int64_t selected_idx = -1;
 
 	ResourceEditor* _get_editor_at(int idx);
 
+	void _post_init();
 	void _element_gui_input(Ref<InputEvent> event, Control* element);
 	void _add_element();
 	void _remove_element();
@@ -135,13 +136,14 @@ private:
 
 	void _toggle_editor_visibility();
 
+	void _update_btn_text();
+
 public:
 	static void _register_methods();
 	void _init();
 	void _custom_init(std::unique_ptr<Schema> schema);
 
 	void emit_something_changed();
-
 	void update_property();
 
 	ResourceInspectorProperty();

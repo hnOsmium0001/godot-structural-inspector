@@ -65,9 +65,9 @@ private:
 
 	HBoxContainer* toolbar;
 	// Child of `toolbar`, used by STRUCT, ENUM
-	EditorIconButton* add;
+	Button* add;
 	// Child of `toolbar`, used by STRUCT, ENUM
-	EditorIconButton* remove;
+	Button* remove;
 	// Child of `toolbar`, used by STRUCT, ENUM
 	Label* message;
 
@@ -91,6 +91,7 @@ private:
 	void _select_type(int id, Schema* swap_out);
 	Variant _get_key();
 
+	void _post_init();
 	void _input(Ref<InputEvent> event);
 	void _notification(int what);
 	void _type_selected(int id);
@@ -125,12 +126,17 @@ class ResourceSchemaInspectorProperty : public EditorProperty {
 private:
 	std::vector<StructSchema::Field> schemas;
 	Button* btn;
+	Button* add;
+	Button* remove;
 	VBoxContainer* properties;
 	int selected_idx = -1;
 	bool updating = false;
 
+	void _post_init();
 	void _toggle_editor_visibility();
 	void _prop_clicked(ResourceSchemaEditor* node);
+
+	void _update_btn_text();
 
 public:
 	static void _register_methods();

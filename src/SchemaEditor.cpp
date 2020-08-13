@@ -8,6 +8,7 @@
 #include <MenuButton.hpp>
 #include <PopupMenu.hpp>
 #include <SpinBox.hpp>
+#include <Texture.hpp>
 #include <algorithm>
 #include <utility>
 
@@ -546,6 +547,7 @@ void ResourceSchemaEditor::_enum_id_set(int id, Control* child) {
 }
 
 void ResourceSchemaEditor::_register_methods() {
+	register_method("_post_init", &ResourceSchemaEditor::_post_init);
 	register_method("_input", &ResourceSchemaEditor::_input);
 	register_method("_notification", &ResourceSchemaEditor::_notification);
 	register_method("_type_selected", &ResourceSchemaEditor::_type_selected);
@@ -590,13 +592,13 @@ void ResourceSchemaEditor::_init() {
 
 	toolbar = HBoxContainer::_new();
 	contents->add_child(toolbar);
-	add = EditorIconButton::_new();
-	add->_custom_init("Add");
+	add = Button::_new();
+	add->set_flat(true);
 	add->set_visible(false);
 	add->connect("pressed", this, "_add_list_item");
 	toolbar->add_child(add);
-	remove = EditorIconButton::_new();
-	remove->_custom_init("Remove");
+	remove = Button::_new();
+	remove->set_flat(true);
 	remove->set_visible(false);
 	remove->connect("pressed", this, "_toggle_remove_mode");
 	toolbar->add_child(remove);
@@ -629,6 +631,13 @@ void ResourceSchemaEditor::_init() {
 	list = VBoxContainer::_new();
 	list->set_visible(false);
 	contents->add_child(list);
+
+	call_deferred("_post_init");
+}
+
+void ResourceSchemaEditor::_post_init() {
+	add->set_button_icon(get_icon("Add", "EditorIcons"));
+	remove->set_button_icon(get_icon("Remove", "EditorIcons"));
 }
 
 void ResourceSchemaEditor::_custom_init(ResourceSchemaInspectorProperty* root, ResourceSchemaEditor* parent, DefinitionReference definition) {
@@ -678,7 +687,12 @@ void ResourceSchemaInspectorProperty::_prop_clicked(ResourceSchemaEditor* node) 
 	selected_idx = node->get_index();
 }
 
+void ResourceSchemaInspectorProperty::_update_btn_text() {
+	btn->set_text("Properties (size " + String::num_int64(properties->get_child_count()) + ")");
+}
+
 void ResourceSchemaInspectorProperty::_register_methods() {
+	register_method("_post_init", &ResourceSchemaInspectorProperty::_post_init);
 	register_method("_toggle_editor_visibility", &ResourceSchemaInspectorProperty::_toggle_editor_visibility);
 	register_method("_prop_clicked", &ResourceSchemaInspectorProperty::_prop_clicked);
 	register_method("add_root_property", &ResourceSchemaInspectorProperty::add_root_property);
@@ -697,16 +711,23 @@ void ResourceSchemaInspectorProperty::_init() {
 	properties->set_visible(false);
 
 	auto toolbar = HBoxContainer::_new();
-	auto add = EditorIconButton::_new();
-	add->_custom_init("Add");
+	properties->add_child(toolbar);
+
+	add = Button::_new();
+	add->set_flat(true);
 	add->connect("pressed", this, "add_root_property");
 	toolbar->add_child(add);
-	auto remove = EditorIconButton::_new();
-	remove->_custom_init("Remove");
+	remove = Button::_new();
+	remove->set_flat(true);
 	remove->connect("pressed", this, "remove_root_property");
 	toolbar->add_child(remove);
 
-	properties->add_child(toolbar);
+	call_deferred("_post_init");
+}
+
+void ResourceSchemaInspectorProperty::_post_init() {
+	add->set_button_icon(get_icon("Add", "EditorIcons"));
+	remove->set_button_icon(get_icon("Remove", "EditorIcons"));
 }
 
 ResourceSchemaEditor* ResourceSchemaInspectorProperty::add_root_property_with(const String& name, std::unique_ptr<Schema> schema) {
@@ -716,6 +737,8 @@ ResourceSchemaEditor* ResourceSchemaInspectorProperty::add_root_property_with(co
 	prop->_custom_init(this, nullptr, { &schemas, schemas.size() - 1 });
 	prop->connect("clicked", this, "_prop_clicked", Array::make(prop));
 	properties->add_child(prop);
+
+	_update_btn_text();
 	emit_something_changed();
 	return prop;
 }
@@ -728,8 +751,10 @@ void ResourceSchemaInspectorProperty::remove_root_property() {
 	if (selected_idx != -1) {
 		properties->get_child(selected_idx)->free();
 		selected_idx = -1;
+
+		_update_btn_text();
+		emit_something_changed();
 	}
-	emit_something_changed();
 }
 
 void ResourceSchemaInspectorProperty::emit_something_changed() {
@@ -766,6 +791,8 @@ void ResourceSchemaInspectorProperty::update_property() {
 			ERR_PRINT("Error while parsing schema entry: " + JSON::get_singleton()->print(dict));
 		}
 	}
+
+	_update_btn_text();
 
 	updating = false;
 }
